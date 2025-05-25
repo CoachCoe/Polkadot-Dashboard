@@ -1,0 +1,43 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --polkadot-pink: #E6007A;
+  --polkadot-pink-light: #FF1190;
+  --polkadot-pink-dark: #D1006E;
+  --background-light: #F5F4F2;
+  --text-primary: #172026;
+  --text-secondary: #666666;
+}
+
+body {
+  background-color: var(--background-light);
+  color: var(--text-primary);
+}
+
+@layer components {
+  .btn-primary {
+    @apply bg-[#E6007A] text-white px-4 py-2 rounded-lg hover:bg-[#FF1190] transition-colors;
+  }
+
+  .btn-secondary {
+    @apply bg-white text-[#E6007A] border border-[#E6007A] px-4 py-2 rounded-lg hover:bg-[#FFF5F9] transition-colors;
+  }
+
+  .card {
+    @apply bg-white rounded-lg shadow-sm hover:shadow-md transition-shadow p-6;
+  }
+
+  .input-field {
+    @apply w-full px-4 py-2 border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#E6007A] focus:border-transparent;
+  }
+
+  .tag {
+    @apply px-3 py-1 bg-[#FFF5F9] text-[#E6007A] rounded-full text-sm font-medium;
+  }
+
+  .link-hover {
+    @apply text-[#E6007A] hover:text-[#FF1190] transition-colors;
+  }
+} 
