@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
 import { polkadotService } from '@/services/polkadot';
-import { PolkadotHubError } from '@/utils/errorHandling';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 interface UnlockingEntry {
   value: string;
@@ -113,7 +113,7 @@ export function useStaking() {
     if (!validatorId) {
       throw new PolkadotHubError(
         'No validator selected',
-        'INVALID_VALIDATOR',
+        ErrorCodes.VALIDATION.INVALID_TARGET,
         'Please select a validator to stake with'
       );
     }
@@ -147,9 +147,9 @@ export function useStaking() {
 
     if (!stakingInfo?.stakingInfo?.active) {
       throw new PolkadotHubError(
-        'No active stake',
-        'NO_STAKE',
-        'You do not have any active stake to unstake'
+        'No active stake found',
+        ErrorCodes.DATA.NOT_FOUND,
+        'You do not have any active stake to unbond'
       );
     }
 

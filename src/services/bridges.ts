@@ -1,6 +1,6 @@
 import { ApiPromise } from '@polkadot/api';
 import { polkadotService } from './polkadot';
-import { handleError, PolkadotHubError } from '@/utils/errorHandling';
+import { handleError, PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import { securityLogger, SecurityEventType } from '@/utils/securityLogger';
 
 export interface ChainInfo {
@@ -257,7 +257,7 @@ class BridgesService {
           typeof accountData.data.free !== 'string') {
         throw new PolkadotHubError(
           'Invalid balance data',
-          'INVALID_BALANCE',
+          ErrorCodes.DATA.INVALID,
           'Failed to retrieve account balance.'
         );
       }

@@ -12,7 +12,8 @@ import { GovernanceCharts } from '@/components/governance/GovernanceCharts';
 import { ReferendaFilters, type StatusFilter, type SortOption } from '@/components/governance/ReferendaFilters';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
 import { PolkadotHubError } from '@/utils/errorHandling';
-import type { Referendum } from '@/services/governance';
+import type { Referendum, Track, DelegationInfo as DelegationInfoType } from '@/services/governance';
+import { ReferendaList } from '@/components/governance/ReferendaList';
 
 export default function GovernancePage() {
   const { selectedAccount } = useWalletStore();
@@ -27,7 +28,18 @@ export default function GovernancePage() {
     delegate,
     undelegate,
     refresh
-  }: { referenda: Referendum[] } & Record<string, any> = useGovernance();
+  }: {
+    referenda: Referendum[];
+    tracks: Track[];
+    delegations: DelegationInfoType[];
+    delegationHistory: DelegationInfoType[];
+    isLoading: boolean;
+    error: string | null;
+    vote: (referendumIndex: number, vote: 'aye' | 'nay', amount: string) => Promise<void>;
+    delegate: (trackId: number, target: string, amount: string, conviction: number) => Promise<void>;
+    undelegate: (trackId: number) => Promise<void>;
+    refresh: () => Promise<void>;
+  } = useGovernance();
 
   const [selectedReferendum, setSelectedReferendum] = useState<number | null>(null);
   const [selectedTrackId, setSelectedTrackId] = useState<number>(0);
@@ -95,7 +107,11 @@ export default function GovernancePage() {
       await vote(referendumIndex, voteType, voteAmount);
       setSelectedReferendum(null);
       setVoteAmount('');
-      setErrorState(new PolkadotHubError('Vote submitted successfully'));
+      setErrorState(new PolkadotHubError(
+        'Vote submitted successfully',
+        'VOTE_SUCCESS',
+        'Your vote has been successfully recorded'
+      ));
     } catch (err) {
       console.error('Failed to vote:', err);
       setErrorState(new PolkadotHubError(
@@ -110,7 +126,11 @@ export default function GovernancePage() {
     try {
       setIsDelegating(true);
       await delegate(trackId, target, amount, conviction);
-      setErrorState(new PolkadotHubError('Delegation successful'));
+      setErrorState(new PolkadotHubError(
+        'Delegation successful',
+        'DELEGATE_SUCCESS',
+        'Your delegation has been successfully recorded'
+      ));
     } catch (err) {
       console.error('Failed to delegate:', err);
       setErrorState(new PolkadotHubError(
@@ -126,7 +146,11 @@ export default function GovernancePage() {
   const handleUndelegate = async (trackId: number) => {
     try {
       await undelegate(trackId);
-      setErrorState(new PolkadotHubError('Successfully undelegated'));
+      setErrorState(new PolkadotHubError(
+        'Successfully undelegated',
+        'UNDELEGATE_SUCCESS',
+        'Your undelegation has been successfully recorded'
+      ));
     } catch (err) {
       console.error('Failed to undelegate:', err);
       setErrorState(new PolkadotHubError(
@@ -161,7 +185,7 @@ export default function GovernancePage() {
         
         {(error || errorState) && (
           <ErrorDisplay
-            error={errorState || new PolkadotHubError(error || 'An error occurred')}
+            error={errorState || new PolkadotHubError(error || 'An error occurred', 'UNKNOWN_ERROR')}
             action={error ? { label: 'Try Again', onClick: handleRefresh } : undefined}
           />
         )}
@@ -189,6 +213,33 @@ export default function GovernancePage() {
         </section>
 
         <section>
+          <h2 className="text-2xl font-semibold mb-4">Referenda</h2>
+          <div className="flex justify-between items-center mb-4">
+            <p className="text-sm text-gray-500">
+              {filteredReferenda.length} referenda found
+            </p>
+          </div>
+          <ReferendaFilters
+            tracks={tracks}
+            selectedTrackId={selectedTrackId}
+            selectedStatus={statusFilter}
+            sortBy={sortBy}
+            onTrackChange={handleTrackChange}
+            onStatusChange={setStatusFilter}
+            onSortChange={setSortBy}
+          />
+          <ReferendaList
+            referenda={filteredReferenda}
+            isLoading={isLoading}
+            selectedReferendum={selectedReferendum}
+            voteAmount={voteAmount}
+            onVoteAmountChange={setVoteAmount}
+            onVote={handleVote}
+            onSelectReferendum={setSelectedReferendum}
+          />
+        </section>
+
+        <section>
           <h2 className="text-2xl font-semibold mb-4">Delegation</h2>
           <div className="space-y-6">
             <DelegationPanel
@@ -203,120 +254,6 @@ export default function GovernancePage() {
               onUndelegate={handleUndelegate}
               isLoading={isLoading}
             />
-          </div>
-        </section>
-
-        <section>
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-2xl font-semibold">Referenda</h2>
-            <p className="text-sm text-gray-500">
-              {filteredReferenda.length} referenda found
-            </p>
-          </div>
-
-          <ReferendaFilters
-            tracks={tracks}
-            selectedTrackId={selectedTrackId}
-            selectedStatus={statusFilter}
-            sortBy={sortBy}
-            onTrackChange={handleTrackChange}
-            onStatusChange={setStatusFilter}
-            onSortChange={setSortBy}
-          />
-
-          <div className="mt-6 space-y-6">
-            {isLoading ? (
-              <div className="text-center py-12">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600 mx-auto"></div>
-                <p className="mt-4 text-gray-600">Loading referenda...</p>
-              </div>
-            ) : filteredReferenda.length === 0 ? (
-              <div className="text-center py-12">
-                <p className="text-gray-600">No referenda found matching the current filters.</p>
-              </div>
-            ) : (
-              filteredReferenda.map((ref) => (
-                <div key={ref.index} className="bg-white rounded-lg shadow-md p-6">
-                  <div className="flex justify-between items-start mb-4">
-                    <div>
-                      <h3 className="text-xl font-semibold">{ref.title}</h3>
-                      <p className="text-gray-600 mt-1">Track: {ref.track}</p>
-                    </div>
-                    <span className={`
-                      px-3 py-1 rounded-full text-sm font-medium
-                      ${ref.status === 'Deciding' ? 'bg-blue-100 text-blue-800' :
-                        ref.status === 'Confirming' ? 'bg-green-100 text-green-800' :
-                        ref.status === 'Completed' ? 'bg-gray-100 text-gray-800' :
-                        'bg-yellow-100 text-yellow-800'}
-                    `}>
-                      {ref.status}
-                    </span>
-                  </div>
-
-                  <p className="text-gray-700 mb-4">{ref.description}</p>
-
-                  <div className="grid grid-cols-3 gap-4 text-sm text-gray-600 mb-4">
-                    <div>
-                      <p className="font-medium">Ayes</p>
-                      <p>{ref.tally.ayes} DOT</p>
-                    </div>
-                    <div>
-                      <p className="font-medium">Nays</p>
-                      <p>{ref.tally.nays} DOT</p>
-                    </div>
-                    <div>
-                      <p className="font-medium">Support</p>
-                      <p>{ref.tally.support} DOT</p>
-                    </div>
-                  </div>
-
-                  {selectedReferendum === ref.index ? (
-                    <div className="space-y-4">
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">
-                          Amount (DOT)
-                        </label>
-                        <input
-                          type="text"
-                          value={voteAmount}
-                          onChange={(e) => setVoteAmount(e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                          placeholder="Enter amount to vote with"
-                        />
-                      </div>
-                      <div className="flex space-x-4">
-                        <button
-                          onClick={() => handleVote(ref.index, 'aye')}
-                          className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-                        >
-                          Vote Aye
-                        </button>
-                        <button
-                          onClick={() => handleVote(ref.index, 'nay')}
-                          className="flex-1 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
-                        >
-                          Vote Nay
-                        </button>
-                        <button
-                          onClick={() => setSelectedReferendum(null)}
-                          className="flex-1 border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => setSelectedReferendum(ref.index)}
-                      className="w-full bg-pink-600 text-white px-4 py-2 rounded-md hover:bg-pink-700"
-                      disabled={ref.status === 'Completed'}
-                    >
-                      {ref.status === 'Completed' ? 'Voting Ended' : 'Vote on Referendum'}
-                    </button>
-                  )}
-                </div>
-              ))
-            )}
           </div>
         </section>
       </div>

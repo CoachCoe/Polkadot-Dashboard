@@ -1,10 +1,14 @@
-import { PolkadotHubError } from './errorHandling';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 interface SanitizeOptions {
   allowedTags?: string[];
   allowedAttributes?: Record<string, string[]>;
   stripHTML?: boolean;
   maxLength?: number;
+  allowedChars?: RegExp;
+  trim?: boolean;
+  toLowerCase?: boolean;
+  toUpperCase?: boolean;
 }
 
 interface BridgeInput {
@@ -45,7 +49,7 @@ class InputSanitizer {
     if (input === undefined || input === null) {
       throw new PolkadotHubError(
         'Invalid input',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         'Input string cannot be null or undefined'
       );
     }
@@ -57,7 +61,7 @@ class InputSanitizer {
     if (input.length > maxLength) {
       throw new PolkadotHubError(
         'Input too long',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         `Input string exceeds maximum length of ${maxLength} characters`
       );
     }
@@ -93,7 +97,7 @@ class InputSanitizer {
     if (!obj || typeof obj !== 'object') {
       throw new PolkadotHubError(
         'Invalid input',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         'Input must be a valid object'
       );
     }
@@ -128,7 +132,7 @@ class InputSanitizer {
     } catch (error) {
       throw new PolkadotHubError(
         'Sanitization failed',
-        'SANITIZATION_ERROR',
+        ErrorCodes.DATA.PARSE_ERROR,
         'Failed to sanitize object',
         error as Error
       );
@@ -139,7 +143,7 @@ class InputSanitizer {
     if (!address) {
       throw new PolkadotHubError(
         'Invalid address',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_ADDRESS,
         'Address cannot be empty'
       );
     }
@@ -149,7 +153,7 @@ class InputSanitizer {
     if (address.length > this.MAX_ADDRESS_LENGTH) {
       throw new PolkadotHubError(
         'Address too long',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         `Address exceeds maximum length of ${this.MAX_ADDRESS_LENGTH} characters`
       );
     }
@@ -159,7 +163,7 @@ class InputSanitizer {
     if (!ss58Regex.test(address)) {
       throw new PolkadotHubError(
         'Invalid address format',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         'Address must be a valid SS58 format'
       );
     }
@@ -171,7 +175,7 @@ class InputSanitizer {
     if (!amount) {
       throw new PolkadotHubError(
         'Invalid amount',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_AMOUNT,
         'Amount cannot be empty'
       );
     }
@@ -181,7 +185,7 @@ class InputSanitizer {
     if (amount.length > this.MAX_AMOUNT_LENGTH) {
       throw new PolkadotHubError(
         'Amount too long',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         `Amount exceeds maximum length of ${this.MAX_AMOUNT_LENGTH} characters`
       );
     }
@@ -196,7 +200,7 @@ class InputSanitizer {
         (parts[1] && parts[1].length > 12)) {
       throw new PolkadotHubError(
         'Invalid amount format',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         'Amount must be a valid number with at most 12 decimal places'
       );
     }
@@ -205,7 +209,7 @@ class InputSanitizer {
     if (parseFloat(sanitized) <= 0) {
       throw new PolkadotHubError(
         'Invalid amount',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         'Amount must be greater than 0'
       );
     }
@@ -217,7 +221,7 @@ class InputSanitizer {
     if (!chainId) {
       throw new PolkadotHubError(
         'Invalid chain ID',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_CHAIN,
         'Chain ID cannot be empty'
       );
     }
@@ -227,7 +231,7 @@ class InputSanitizer {
     if (chainId.length > this.MAX_CHAIN_ID_LENGTH) {
       throw new PolkadotHubError(
         'Chain ID too long',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         `Chain ID exceeds maximum length of ${this.MAX_CHAIN_ID_LENGTH} characters`
       );
     }
@@ -239,7 +243,7 @@ class InputSanitizer {
     if (!/^[a-z0-9][-a-z0-9]*[a-z0-9]$/i.test(sanitized)) {
       throw new PolkadotHubError(
         'Invalid chain ID format',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         'Chain ID must start and end with alphanumeric characters'
       );
     }
@@ -251,7 +255,7 @@ class InputSanitizer {
     if (!json) {
       throw new PolkadotHubError(
         'Invalid JSON',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         'JSON string cannot be empty'
       );
     }
@@ -261,7 +265,7 @@ class InputSanitizer {
       if (parsed === null || typeof parsed !== 'object') {
         throw new PolkadotHubError(
           'Invalid JSON',
-          'INVALID_INPUT',
+          ErrorCodes.VALIDATION.INVALID_PARAMETER,
           'JSON must represent an object'
         );
       }
@@ -269,7 +273,7 @@ class InputSanitizer {
     } catch (error) {
       throw new PolkadotHubError(
         'Invalid JSON format',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         'Failed to parse JSON string',
         error as Error
       );
@@ -280,7 +284,7 @@ class InputSanitizer {
     if (!input || typeof input !== 'object') {
       throw new PolkadotHubError(
         'Invalid bridge input',
-        'INVALID_INPUT',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
         'Bridge input must be a valid object'
       );
     }

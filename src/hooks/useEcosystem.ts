@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ecosystemService, type Project, type ProjectCategory } from '@/services/ecosystem';
-import { PolkadotHubError } from '@/utils/errorHandling';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 interface EcosystemFilters {
   category?: string | undefined;
@@ -56,11 +56,10 @@ export function useEcosystem() {
           ? err
           : new PolkadotHubError(
               'Failed to load ecosystem data',
-              'ECOSYSTEM_LOAD_ERROR',
-              err instanceof Error ? err.message : 'Unknown error occurred'
+              ErrorCodes.DATA.ECOSYSTEM_LOAD_ERROR,
+              'Could not load project list'
             )
       );
-      console.error('Ecosystem data loading error:', err);
     } finally {
       setIsLoading(false);
     }
@@ -78,21 +77,7 @@ export function useEcosystem() {
   }, [loadProjects, categories.length, isLoading]);
 
   const updateFilters = useCallback((newFilters: Partial<EcosystemFilters>) => {
-    setFilters(prev => {
-      const updatedFilters = {
-        ...prev,
-        ...newFilters
-      };
-      
-      // Remove undefined values
-      Object.keys(updatedFilters).forEach(key => {
-        if (updatedFilters[key as keyof EcosystemFilters] === undefined) {
-          delete updatedFilters[key as keyof EcosystemFilters];
-        }
-      });
-
-      return updatedFilters;
-    });
+    setFilters(prev => ({ ...prev, ...newFilters }));
   }, []);
 
   const clearFilters = useCallback(() => {
@@ -117,6 +102,22 @@ export function useEcosystem() {
     }
   }, []);
 
+  const getProjects = useCallback(async () => {
+    try {
+      const projectList = await ecosystemService.getProjects();
+      setProjects(projectList);
+      return projectList;
+    } catch (err) {
+      throw err instanceof PolkadotHubError
+        ? err
+        : new PolkadotHubError(
+            'Failed to load projects',
+            ErrorCodes.DATA.PROJECT_FETCH_ERROR,
+            'Could not load project list'
+          );
+    }
+  }, []);
+
   return {
     categories,
     projects,
@@ -127,6 +128,7 @@ export function useEcosystem() {
     updateFilters,
     clearFilters,
     getProjectById,
+    getProjects,
     refresh: loadEcosystemData
   };
 } 

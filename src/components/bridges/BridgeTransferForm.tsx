@@ -3,12 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { ChainInfo } from '@/services/bridges';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
-import { PolkadotHubError } from '@/utils/errorHandling';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
+import { useWalletStore } from '@/store/useWalletStore';
+import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 
 interface BridgeTransferFormProps {
   chains: ChainInfo[];
   balances: Record<string, string>;
-  onTransfer: (fromChainId: string, toChainId: string, amount: string, recipient: string) => Promise<void>;
+  onTransfer: (amount: string, destination: string) => Promise<void>;
   onEstimateFees: (fromChainId: string, toChainId: string, amount: string) => Promise<{
     bridgeFee: string;
     destinationFee: string;
@@ -30,6 +32,7 @@ export function BridgeTransferForm({
   onEstimateFees,
   isLoading
 }: BridgeTransferFormProps) {
+  const { selectedAccount } = useWalletStore();
   const [fromChainId, setFromChainId] = useState<string>('');
   const [toChainId, setToChainId] = useState<string>('');
   const [amount, setAmount] = useState('');
@@ -38,18 +41,42 @@ export function BridgeTransferForm({
   const [feeEstimate, setFeeEstimate] = useState<FeeEstimate | null>(null);
   const [isEstimating, setIsEstimating] = useState(false);
   const [isTransferring, setIsTransferring] = useState(false);
+  const [estimatedFees, setEstimatedFees] = useState<string | null>(null);
 
   useEffect(() => {
-    const estimateDebounced = setTimeout(() => {
-      if (fromChainId && toChainId && amount && validateAmount(amount)) {
-        void estimateFees();
-      } else {
+    const estimateFees = async () => {
+      if (!amount || !toChainId) {
         setFeeEstimate(null);
+        setEstimatedFees(null);
+        return;
       }
-    }, 500);
 
-    return () => clearTimeout(estimateDebounced);
-  }, [fromChainId, toChainId, amount]);
+      try {
+        setIsEstimating(true);
+        setError(null);
+
+        const estimate = await onEstimateFees(fromChainId, toChainId, amount);
+        setFeeEstimate(estimate);
+        setEstimatedFees(estimate.bridgeFee + estimate.destinationFee);
+      } catch (err) {
+        setError(
+          err instanceof PolkadotHubError
+            ? err
+            : new PolkadotHubError(
+                'Failed to estimate fees',
+                ErrorCodes.BRIDGE.ESTIMATE_ERROR,
+                'Unable to calculate transfer fees. Please try again.'
+              )
+        );
+        setFeeEstimate(null);
+        setEstimatedFees(null);
+      } finally {
+        setIsEstimating(false);
+      }
+    };
+
+    void estimateFees();
+  }, [amount, toChainId, fromChainId, onEstimateFees]);
 
   const validateAmount = (value: string): boolean => {
     if (!value) return false;
@@ -80,38 +107,35 @@ export function BridgeTransferForm({
     return address.length >= 32 && address.length <= 64;
   };
 
-  const estimateFees = async () => {
-    if (!fromChainId || !toChainId || !amount) return;
-    
-    try {
-      setIsEstimating(true);
-      setError(null);
-      const estimate = await onEstimateFees(fromChainId, toChainId, amount);
-      setFeeEstimate(estimate);
-    } catch (error) {
-      if (error instanceof PolkadotHubError) {
-        setError(error);
-      } else {
-        setError(new PolkadotHubError(
-          'Failed to estimate fees',
-          'ESTIMATE_ERROR',
-          'Unable to calculate transfer fees. Please try again.'
-        ));
-      }
-      setFeeEstimate(null);
-    } finally {
-      setIsEstimating(false);
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fromChainId || !toChainId || !amount || !recipient) return;
-    
+
+    if (!selectedAccount) {
+      setError(
+        new PolkadotHubError(
+          'Wallet not connected',
+          ErrorCodes.WALLET.NOT_CONNECTED,
+          'Please connect your wallet to make a transfer.'
+        )
+      );
+      return;
+    }
+
+    if (!fromChainId || !toChainId || !amount || !recipient) {
+      setError(
+        new PolkadotHubError(
+          'Missing required fields',
+          ErrorCodes.VALIDATION.INVALID_PARAMETER,
+          'Please fill in all required fields.'
+        )
+      );
+      return;
+    }
+
     if (!validateAmount(amount)) {
       setError(new PolkadotHubError(
         'Invalid amount',
-        'INVALID_AMOUNT',
+        ErrorCodes.VALIDATION.INVALID_AMOUNT,
         'Please enter a valid amount within the allowed limits.'
       ));
       return;
@@ -120,7 +144,7 @@ export function BridgeTransferForm({
     if (!validateRecipient(recipient)) {
       setError(new PolkadotHubError(
         'Invalid recipient',
-        'INVALID_RECIPIENT',
+        ErrorCodes.VALIDATION.INVALID_RECIPIENT,
         'Please enter a valid recipient address.'
       ));
       return;
@@ -129,21 +153,20 @@ export function BridgeTransferForm({
     try {
       setIsTransferring(true);
       setError(null);
-      await onTransfer(fromChainId, toChainId, amount, recipient);
-      // Reset form after successful transfer
+      await onTransfer(amount, recipient);
       setAmount('');
       setRecipient('');
       setFeeEstimate(null);
-    } catch (error) {
-      if (error instanceof PolkadotHubError) {
-        setError(error);
-      } else {
-        setError(new PolkadotHubError(
-          'Transfer failed',
-          'TRANSFER_ERROR',
-          'Failed to process the transfer. Please try again.'
-        ));
-      }
+    } catch (err) {
+      setError(
+        err instanceof PolkadotHubError
+          ? err
+          : new PolkadotHubError(
+              'Transfer failed',
+              ErrorCodes.BRIDGE.ERROR,
+              'Failed to complete the transfer. Please try again.'
+            )
+      );
     } finally {
       setIsTransferring(false);
     }
@@ -330,13 +353,22 @@ export function BridgeTransferForm({
         </div>
       )}
 
+      {estimatedFees && (
+        <div className="text-sm text-gray-600">
+          Estimated fees: {estimatedFees} DOT
+        </div>
+      )}
+
       <button
         type="submit"
         className="w-full bg-pink-600 text-white px-4 py-2 rounded-md hover:bg-pink-700 disabled:opacity-50"
         disabled={isProcessing || !isFormValid}
       >
-        {isTransferring ? 'Processing Transfer...' : 
-         isLoading ? 'Loading...' : 'Initiate Transfer'}
+        {isTransferring ? (
+          <LoadingSpinner />
+        ) : (
+          isLoading ? 'Loading...' : 'Initiate Transfer'
+        )}
       </button>
     </form>
   );

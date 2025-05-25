@@ -1,5 +1,4 @@
-import { PolkadotHubError } from '@/utils/errorHandling';
-import axios from 'axios';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import { rateLimiter } from '@/utils/rateLimit';
 
 interface ProjectStats {
@@ -112,7 +111,7 @@ class ProjectStatsService {
       
       throw new PolkadotHubError(
         'Failed to fetch price data',
-        'COINGECKO_ERROR',
+        ErrorCodes.NETWORK.API_ERROR,
         error.message
       );
     }

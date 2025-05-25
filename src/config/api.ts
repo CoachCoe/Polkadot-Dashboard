@@ -2,12 +2,21 @@ import axios from 'axios';
 
 // Create axios instances with different configurations
 export const coingeckoApi = axios.create({
-  baseURL: 'https://api.coingecko.com/api/v3',
+  baseURL: process.env.NEXT_PUBLIC_COINGECKO_API_KEY 
+    ? 'https://pro-api.coingecko.com/api/v3'
+    : 'https://api.coingecko.com/api/v3',
   timeout: 10000,
   headers: {
-    'Accept': 'application/json'
+    'Accept': 'application/json',
+    ...(process.env.NEXT_PUBLIC_COINGECKO_API_KEY && {
+      'X-Cg-Pro-Api-Key': process.env.NEXT_PUBLIC_COINGECKO_API_KEY
+    })
   }
 });
+
+// Cache for API responses
+const coingeckoCache = new Map<string, { data: any; timestamp: number }>();
+const COINGECKO_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 // Cache for Subscan API responses
 const subscanCache = new Map<string, { data: any; timestamp: number; stale: boolean }>();
@@ -92,6 +101,50 @@ const setCachedData = (cacheKey: string, data: any) => {
     stale: false
   });
 };
+
+// Add request interceptor for CoinGecko API
+coingeckoApi.interceptors.request.use(
+  async config => {
+    const cacheKey = `${config.method}-${config.url}-${JSON.stringify(config.params)}`;
+    const cached = coingeckoCache.get(cacheKey);
+    
+    if (cached && Date.now() - cached.timestamp < COINGECKO_CACHE_TTL) {
+      return Promise.reject({ 
+        response: { data: cached.data },
+        __fromCache: true 
+      });
+    }
+    return config;
+  },
+  error => Promise.reject(error)
+);
+
+// Add response interceptor for CoinGecko API
+coingeckoApi.interceptors.response.use(
+  response => {
+    const cacheKey = `${response.config.method}-${response.config.url}-${JSON.stringify(response.config.params)}`;
+    coingeckoCache.set(cacheKey, {
+      data: response.data,
+      timestamp: Date.now()
+    });
+    return response;
+  },
+  async error => {
+    if (error.__fromCache) {
+      return { data: error.response.data, __cached: true };
+    }
+    
+    if (error.response?.status === 429) {
+      // Return cached data if available when rate limited
+      const cacheKey = `${error.config.method}-${error.config.url}-${JSON.stringify(error.config.params)}`;
+      const cached = coingeckoCache.get(cacheKey);
+      if (cached) {
+        return { data: cached.data, __cached: true };
+      }
+    }
+    return Promise.reject(error);
+  }
+);
 
 // Add request interceptor for Subscan API
 subscanApi.interceptors.request.use(

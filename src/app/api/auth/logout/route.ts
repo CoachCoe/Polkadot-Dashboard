@@ -1,56 +1,28 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { authService } from '@/services/authService';
-import { securityLogger, SecurityEventType } from '@/utils/securityLogger';
-import { PolkadotHubError } from '@/utils/errorHandling';
+import { cookies } from 'next/headers';
+import { NextResponse } from 'next/server';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
-export async function POST(request: NextRequest) {
+export async function POST() {
   try {
-    const sessionId = request.cookies.get('session_id')?.value;
+    const cookieStore = cookies();
+    const sessionToken = cookieStore.get('session_token');
 
-    if (!sessionId) {
+    if (!sessionToken) {
       throw new PolkadotHubError(
         'No active session',
-        'AUTH_NO_SESSION'
+        ErrorCodes.AUTH.NO_SESSION,
+        'No session token found in cookies.'
       );
     }
 
-    await authService.logout(sessionId);
+    // Delete the session cookie
+    cookieStore.delete('session_token');
 
-    const response = NextResponse.json(
-      { message: 'Logged out successfully' },
-      { status: 200 }
-    );
-
-    response.cookies.delete('session_id');
-
-    return response;
+    return NextResponse.json({ success: true });
   } catch (error) {
-    await securityLogger.logEvent({
-      type: SecurityEventType.API_ERROR,
-      timestamp: new Date().toISOString(),
-      details: {
-        error: String(error),
-        endpoint: '/api/auth/logout'
-      }
-    });
-
     if (error instanceof PolkadotHubError) {
-      return NextResponse.json(
-        {
-          message: error.message,
-          code: error.code,
-          details: error.details
-        },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: error.userMessage }, { status: 401 });
     }
-
-    return NextResponse.json(
-      {
-        message: 'Logout failed',
-        code: 'AUTH_LOGOUT_FAILED'
-      },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Failed to logout' }, { status: 500 });
   }
 } 

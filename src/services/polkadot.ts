@@ -2,7 +2,7 @@ import { ApiPromise, WsProvider } from '@polkadot/api';
 import type { AccountInfo, StakingLedger, UnlockChunk } from '@polkadot/types/interfaces';
 import type { Option } from '@polkadot/types';
 import type { Vec } from '@polkadot/types/codec';
-import { handleError, PolkadotHubError } from '@/utils/errorHandling';
+import { handleError, PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import { securityLogger, SecurityEventType } from '@/utils/securityLogger';
 import { validateAddress } from '@polkadot/util-crypto';
 
@@ -288,7 +288,7 @@ class PolkadotService {
       if (!stakingInfo.stakingInfo?.active) {
         throw new PolkadotHubError(
           'No active stake',
-          'NO_STAKE',
+          ErrorCodes.DATA.NOT_FOUND,
           'No active stake found for this address'
         );
       }

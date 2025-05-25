@@ -17,8 +17,9 @@ import { DashboardLayout } from '@/components/layouts/DashboardLayout';
 import { useEcosystem } from '@/hooks/useEcosystem';
 import { projectStatsService } from '@/services/projectStats';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
-import { PolkadotHubError } from '@/utils/errorHandling';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import type { Project, ProjectStats } from '@/services/ecosystem';
+import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 
 interface DetailedStats extends ProjectStats {
   // Additional fields specific to the detail view
@@ -91,7 +92,7 @@ export default function ProjectDetailPage() {
       if (!id) {
         setError(new PolkadotHubError(
           'Invalid project ID',
-          'INVALID_ID',
+          ErrorCodes.VALIDATION.INVALID_ID,
           'No project ID was provided'
         ));
         setIsLoading(false);
@@ -107,7 +108,7 @@ export default function ProjectDetailPage() {
         if (!projectData) {
           throw new PolkadotHubError(
             'Project not found',
-            'NOT_FOUND',
+            ErrorCodes.DATA.NOT_FOUND,
             `No project found with ID: ${id}`
           );
         }
@@ -136,7 +137,7 @@ export default function ProjectDetailPage() {
             ? err
             : new PolkadotHubError(
                 'Failed to load project details',
-                'LOAD_ERROR',
+                ErrorCodes.DATA.NOT_FOUND,
                 err instanceof Error ? err.message : 'Unknown error occurred'
               )
         );
@@ -152,17 +153,7 @@ export default function ProjectDetailPage() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <div className="px-6 py-8">
-          <div className="animate-pulse space-y-8">
-            <div className="h-8 bg-gray-200 rounded w-1/4"></div>
-            <div className="h-32 bg-gray-200 rounded"></div>
-            <div className="grid grid-cols-4 gap-4">
-              {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-24 bg-gray-200 rounded"></div>
-              ))}
-            </div>
-          </div>
-        </div>
+        <LoadingSpinner />
       </DashboardLayout>
     );
   }
@@ -170,15 +161,11 @@ export default function ProjectDetailPage() {
   if (error || !project) {
     return (
       <DashboardLayout>
-        <div className="px-6 py-8">
-          <ErrorDisplay
-            error={error || new PolkadotHubError(
-              'Project not found',
-              'NOT_FOUND',
-              'The requested project could not be found'
-            )}
-          />
-        </div>
+        <ErrorDisplay error={error || new PolkadotHubError(
+          'Project not found',
+          ErrorCodes.DATA.NOT_FOUND,
+          'The requested project could not be found'
+        )} />
       </DashboardLayout>
     );
   }

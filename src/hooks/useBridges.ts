@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
 import { bridgesService, type ChainInfo, type BridgeTransaction } from '@/services/bridges';
-import { handleError, PolkadotHubError } from '@/utils/errorHandling';
+import { handleError, PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 interface BridgeState {
   supportedChains: ChainInfo[];
@@ -89,7 +89,7 @@ export function useBridges() {
       if (fromChainId === toChainId) {
         throw new PolkadotHubError(
           'Invalid chain selection',
-          'SAME_CHAIN',
+          ErrorCodes.VALIDATION.INVALID_CHAIN,
           'Source and destination chains must be different.'
         );
       }
@@ -124,7 +124,7 @@ export function useBridges() {
       if (fromChainId === toChainId) {
         throw new PolkadotHubError(
           'Invalid chain selection',
-          'SAME_CHAIN',
+          ErrorCodes.VALIDATION.INVALID_CHAIN,
           'Source and destination chains must be different.'
         );
       }

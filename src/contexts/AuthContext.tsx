@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
 import { useAuth } from '@/hooks/useAuth';
-import { PolkadotHubError } from '@/utils/errorHandling';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 interface AuthContextType {
   isAuthenticated: boolean;
@@ -46,7 +46,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (!selectedAccount) {
         throw new PolkadotHubError(
           'Please connect your wallet first',
-          'AUTH_NO_WALLET',
+          ErrorCodes.WALLET.NOT_CONNECTED,
           'Connect your wallet to authenticate with Polkadot Dashboard.'
         );
       }
@@ -94,7 +94,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setError(new PolkadotHubError(
           err instanceof Error ? err.message : 'Failed to disconnect wallet',
-          'WALLET_DISCONNECT_ERROR',
+          ErrorCodes.WALLET.DISCONNECTED,
           'Please try again or refresh the page.'
         ));
       }

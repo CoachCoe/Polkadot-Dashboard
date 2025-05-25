@@ -2,7 +2,7 @@
 
 import { create } from 'zustand';
 import type { Signer } from '@polkadot/api/types';
-import { PolkadotHubError } from '@/utils/errorHandling';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 interface Account {
   address: string;
@@ -20,6 +20,12 @@ interface WalletState {
   clearError: () => void;
 }
 
+declare global {
+  interface Window {
+    injectedWeb3?: Record<string, unknown>;
+  }
+}
+
 export const useWalletStore = create<WalletState>((set) => ({
   accounts: [],
   selectedAccount: null,
@@ -34,38 +40,49 @@ export const useWalletStore = create<WalletState>((set) => ({
       if (typeof window === 'undefined') {
         throw new PolkadotHubError(
           'Cannot connect wallet on server side',
-          'ENVIRONMENT_ERROR',
+          ErrorCodes.ENV.ERROR,
           'Wallet connection must be initiated from client side.'
         );
       }
 
-      // Check if extension object exists and wait for initialization
-      const checkExtension = async (retries = 5, interval = 500) => {
-        for (let i = 0; i < retries; i++) {
-          if ((window as any).injectedWeb3 && Object.keys((window as any).injectedWeb3).length > 0) {
+      // Wait for extension to be ready with timeout
+      const waitForExtension = async (timeout = 3000) => {
+        const start = Date.now();
+        while (Date.now() - start < timeout) {
+          if (window.injectedWeb3 && Object.keys(window.injectedWeb3).length > 0) {
             return true;
           }
-          await new Promise(resolve => setTimeout(resolve, interval));
+          await new Promise(resolve => setTimeout(resolve, 100));
         }
         return false;
       };
 
-      const extensionFound = await checkExtension();
-      
-      if (!extensionFound) {
+      const extensionReady = await waitForExtension();
+      if (!extensionReady) {
         throw new PolkadotHubError(
           'No wallet extension found',
-          'WALLET_NOT_FOUND',
+          ErrorCodes.WALLET.NOT_FOUND,
           'Please install the Polkadot.js extension or another compatible wallet and refresh the page.'
         );
       }
 
       // Dynamically import Polkadot extension modules
-      const extensionDapp = await import('@polkadot/extension-dapp');
+      let extensionDapp;
+      try {
+        extensionDapp = await import('@polkadot/extension-dapp');
+      } catch (err) {
+        console.error('Failed to load extension-dapp:', err);
+        throw new PolkadotHubError(
+          'Failed to load wallet extension module',
+          ErrorCodes.WALLET.EXTENSION_LOAD_ERROR,
+          'Please refresh the page and try again.'
+        );
+      }
+
       if (!extensionDapp) {
         throw new PolkadotHubError(
           'Wallet extension module not available',
-          'EXTENSION_NOT_AVAILABLE',
+          ErrorCodes.WALLET.EXTENSION_NOT_AVAILABLE,
           'The wallet extension module could not be loaded.'
         );
       }
@@ -79,7 +96,7 @@ export const useWalletStore = create<WalletState>((set) => ({
       if (extensions.length === 0) {
         throw new PolkadotHubError(
           'No wallet extension found',
-          'WALLET_NOT_FOUND',
+          ErrorCodes.WALLET.NOT_FOUND,
           'Please install the Polkadot.js extension or another compatible wallet.'
         );
       }
@@ -90,7 +107,7 @@ export const useWalletStore = create<WalletState>((set) => ({
           try {
             const accounts = await Promise.race([
               web3Accounts(),
-              new Promise((_, reject) => 
+              new Promise<never>((_, reject) => 
                 setTimeout(() => reject(new Error('Account request timeout')), 10000)
               )
             ]);
@@ -102,13 +119,14 @@ export const useWalletStore = create<WalletState>((set) => ({
             // If no accounts found but no error, wait before retrying
             await new Promise(resolve => setTimeout(resolve, 1000));
           } catch (err) {
+            console.error(`Failed to get accounts (attempt ${i + 1}/${maxRetries}):`, err);
             if (i === maxRetries - 1) throw err; // Throw on last retry
             await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
           }
         }
         throw new PolkadotHubError(
           'No accounts found after retries',
-          'NO_ACCOUNTS',
+          ErrorCodes.WALLET.NO_ACCOUNTS,
           'Please create or import an account in your wallet extension.'
         );
       };
@@ -118,7 +136,7 @@ export const useWalletStore = create<WalletState>((set) => ({
       if (!Array.isArray(allAccounts) || allAccounts.length === 0) {
         throw new PolkadotHubError(
           'No accounts found',
-          'NO_ACCOUNTS',
+          ErrorCodes.WALLET.NO_ACCOUNTS,
           'Please create or import an account in your wallet extension.'
         );
       }
@@ -138,15 +156,16 @@ export const useWalletStore = create<WalletState>((set) => ({
           if (!injector?.signer) {
             throw new PolkadotHubError(
               'No signer available',
-              'NO_SIGNER',
+              ErrorCodes.WALLET.NO_SIGNER,
               'The selected account does not support signing.'
             );
           }
           signer = injector.signer;
         } catch (err) {
+          console.error('Failed to get signer:', err);
           throw new PolkadotHubError(
             'Failed to get signer',
-            'SIGNER_ERROR',
+            ErrorCodes.WALLET.SIGNER_ERROR,
             'Could not get signer for the selected account. Please check your wallet extension permissions.'
           );
         }
@@ -159,9 +178,10 @@ export const useWalletStore = create<WalletState>((set) => ({
         error: null
       });
     } catch (error) {
+      console.error('Wallet connection error:', error);
       const handledError = error instanceof PolkadotHubError ? error : new PolkadotHubError(
         error instanceof Error ? error.message : 'An unknown error occurred',
-        'WALLET_CONNECTION_ERROR',
+        ErrorCodes.WALLET.CONNECTION_ERROR,
         'Please try again or refresh the page.'
       );
       set({ error: handledError });

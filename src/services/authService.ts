@@ -1,8 +1,9 @@
 import { securityLogger, SecurityEventType } from '@/utils/securityLogger';
 import { sessionManager } from '@/utils/sessionManager';
-import { PolkadotHubError } from '@/utils/errorHandling';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import { cryptoWaitReady } from '@polkadot/util-crypto';
-import { u8aToHex } from '@polkadot/util';
+import { u8aToHex } from '@polkadot/util';import { signatureVerify } from '@polkadot/util-crypto';
+import { hexToU8a } from '@polkadot/util';
 
 interface AuthChallenge {
   message: string;
@@ -77,9 +78,6 @@ class AuthService {
       }
 
       // Verify the signature using Polkadot.js
-      const { signatureVerify } = await import('@polkadot/util-crypto');
-      const { hexToU8a } = await import('@polkadot/util');
-
       const { isValid } = signatureVerify(
         challenge.message,
         hexToU8a(signature),
@@ -184,6 +182,141 @@ class AuthService {
         sessionId
       }
     });
+  }
+
+  async authenticate(address: string, signature: string, message: string): Promise<string> {
+    try {
+      if (!address) {
+        throw new PolkadotHubError(
+          'Missing address',
+          ErrorCodes.AUTH.MISSING_FIELDS,
+          'Wallet address is required.'
+        );
+      }
+
+      if (!signature) {
+        throw new PolkadotHubError(
+          'Missing signature',
+          ErrorCodes.AUTH.MISSING_FIELDS,
+          'Signature is required.'
+        );
+      }
+
+      if (!message) {
+        throw new PolkadotHubError(
+          'Missing message',
+          ErrorCodes.AUTH.MISSING_FIELDS,
+          'Message is required.'
+        );
+      }
+
+      // Verify the signature using Polkadot.js util-crypto
+      const { isValid } = signatureVerify(message, hexToU8a(signature), address);
+
+      if (!isValid) {
+        throw new PolkadotHubError(
+          'Invalid signature',
+          ErrorCodes.AUTH.INVALID_SIGNATURE,
+          'The provided signature is not valid.'
+        );
+      }
+
+      // Generate a session token (in a real app, you'd want to use a proper session management system)
+      const sessionToken = Buffer.from(`${address}:${Date.now()}`).toString('base64');
+
+      await securityLogger.logEvent({
+        type: SecurityEventType.AUTH_SUCCESS,
+        timestamp: new Date().toISOString(),
+        details: {
+          address,
+          message
+        }
+      });
+
+      return sessionToken;
+    } catch (error) {
+      await securityLogger.logEvent({
+        type: SecurityEventType.AUTH_FAILURE,
+        timestamp: new Date().toISOString(),
+        details: {
+          error: String(error)
+        }
+      });
+      throw error;
+    }
+  }
+
+  async verifySession(sessionToken: string): Promise<boolean> {
+    try {
+      if (!sessionToken) {
+        throw new PolkadotHubError(
+          'No session token provided',
+          ErrorCodes.AUTH.NO_SESSION,
+          'Session token is required.'
+        );
+      }
+
+      // In a real app, you'd verify the session token against your session store
+      const [address, timestamp] = Buffer.from(sessionToken, 'base64')
+        .toString()
+        .split(':');
+
+      if (!address || !timestamp) {
+        throw new PolkadotHubError(
+          'Invalid session token',
+          ErrorCodes.AUTH.INVALID_TOKEN,
+          'The session token is malformed.'
+        );
+      }
+
+      const tokenAge = Date.now() - parseInt(timestamp);
+      if (tokenAge > 24 * 60 * 60 * 1000) { // 24 hours
+        throw new PolkadotHubError(
+          'Session expired',
+          ErrorCodes.AUTH.SESSION_EXPIRED,
+          'Please sign in again.'
+        );
+      }
+
+      return true;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  async verifyChallenge(challengeId: string): Promise<string> {
+    try {
+      const challenge = await this.getChallenge(challengeId);
+      
+      if (!challenge) {
+        throw new PolkadotHubError(
+          'Challenge not found',
+          ErrorCodes.AUTH.CHALLENGE_NOT_FOUND,
+          'The authentication challenge was not found.'
+        );
+      }
+
+      if (Date.now() - challenge.timestamp > 5 * 60 * 1000) { // 5 minutes
+        throw new PolkadotHubError(
+          'Challenge expired',
+          ErrorCodes.AUTH.CHALLENGE_EXPIRED,
+          'The authentication challenge has expired. Please request a new one.'
+        );
+      }
+
+      return challenge.message;
+    } catch (error) {
+      throw error;
+    }
+  }
+
+  private async getChallenge(challengeId: string): Promise<{ message: string; timestamp: number } | null> {
+    // In a real app, you'd get this from a database or cache
+    // This is just a mock implementation
+    return {
+      message: 'Sign this message to authenticate: ' + challengeId,
+      timestamp: Date.now() - 60 * 1000 // 1 minute ago
+    };
   }
 }
 

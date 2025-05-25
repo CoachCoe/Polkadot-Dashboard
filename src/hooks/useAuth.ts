@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWalletStore } from '@/store/useWalletStore';
-import { PolkadotHubError } from '@/utils/errorHandling';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 interface AuthState {
   isLoading: boolean;
@@ -33,7 +33,7 @@ export function useAuth() {
             isInitialized: true,
             error: new PolkadotHubError(
               'No wallet extension found',
-              'NO_EXTENSION',
+              ErrorCodes.WALLET.EXTENSION_NOT_AVAILABLE,
               'Please install the Polkadot.js extension to connect your wallet.'
             )
           }));
@@ -51,8 +51,8 @@ export function useAuth() {
           isInitialized: true,
           error: new PolkadotHubError(
             'Failed to initialize wallet extension',
-            'WALLET_INIT_FAILED',
-            error instanceof Error ? error.message : 'Unknown error occurred'
+            ErrorCodes.WALLET.EXTENSION_LOAD_ERROR,
+            'Please try again or refresh the page.'
           )
         }));
       }
@@ -65,16 +65,16 @@ export function useAuth() {
     if (!authState.isInitialized) {
       throw new PolkadotHubError(
         'Wallet extension not initialized',
-        'WALLET_NOT_INITIALIZED',
+        ErrorCodes.WALLET.NOT_CONNECTED,
         'Please wait for the wallet extension to initialize.'
       );
     }
 
     if (!selectedAccount || !signer) {
       throw new PolkadotHubError(
-        'Please connect your wallet first',
-        'AUTH_NO_WALLET',
-        'Connect your wallet to authenticate with Polkadot Dashboard.'
+        'No wallet connected',
+        ErrorCodes.WALLET.NOT_CONNECTED,
+        'Please connect your wallet to continue.'
       );
     }
 
@@ -97,9 +97,9 @@ export function useAuth() {
       // Sign the challenge message
       if (!signer.signRaw) {
         throw new PolkadotHubError(
-          'Wallet does not support message signing',
-          'AUTH_SIGNING_NOT_SUPPORTED',
-          'Please use a wallet that supports message signing.'
+          'Signing not supported',
+          ErrorCodes.GENERIC.NOT_SUPPORTED,
+          'Your wallet does not support message signing.'
         );
       }
 
@@ -126,8 +126,8 @@ export function useAuth() {
         const error = await authResponse.json();
         throw new PolkadotHubError(
           error.message || 'Authentication failed',
-          error.code || 'AUTH_FAILED',
-          error.details
+          ErrorCodes.AUTH.VERIFICATION_FAILED,
+          'Failed to authenticate with the server.'
         );
       }
 
@@ -135,7 +135,7 @@ export function useAuth() {
     } catch (error) {
       const handledError = error instanceof PolkadotHubError ? error : new PolkadotHubError(
         'Authentication failed',
-        'AUTH_FAILED',
+        ErrorCodes.AUTH.VERIFICATION_FAILED,
         error instanceof Error ? error.message : 'Unknown error occurred'
       );
       setAuthState(prev => ({ ...prev, error: handledError }));
@@ -160,8 +160,8 @@ export function useAuth() {
         const error = await response.json();
         throw new PolkadotHubError(
           error.message || 'Failed to logout',
-          error.code || 'LOGOUT_FAILED',
-          error.details
+          ErrorCodes.AUTH.SESSION_EXPIRED,
+          'Failed to logout. Please try again.'
         );
       }
 
@@ -170,7 +170,7 @@ export function useAuth() {
     } catch (error) {
       const handledError = error instanceof PolkadotHubError ? error : new PolkadotHubError(
         'Logout failed',
-        'LOGOUT_FAILED',
+        ErrorCodes.AUTH.SESSION_EXPIRED,
         error instanceof Error ? error.message : 'Unknown error occurred'
       );
       setAuthState(prev => ({ ...prev, error: handledError }));
