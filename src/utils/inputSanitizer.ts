@@ -1,4 +1,3 @@
-import DOMPurify from 'isomorphic-dompurify';
 import { PolkadotHubError } from './errorHandling';
 
 interface SanitizeOptions {
@@ -24,6 +23,14 @@ class InputSanitizer {
   private readonly MAX_AMOUNT_LENGTH = 50;
   private readonly MAX_ADDRESS_LENGTH = 100;
   private readonly MAX_CHAIN_ID_LENGTH = 20;
+  private readonly ALLOWED_HTML_TAGS = ['p', 'br', 'strong', 'em', 'ul', 'li'];
+  private readonly ALLOWED_HTML_ATTRS = {
+    'p': ['class'],
+    'strong': ['class'],
+    'em': ['class'],
+    'ul': ['class'],
+    'li': ['class']
+  };
 
   private constructor() {}
 
@@ -34,7 +41,7 @@ class InputSanitizer {
     return InputSanitizer.instance;
   }
 
-  sanitizeString(input: string, options: SanitizeOptions = {}): string {
+  async sanitizeString(input: string, options: SanitizeOptions = {}): Promise<string> {
     if (input === undefined || input === null) {
       throw new PolkadotHubError(
         'Invalid input',
@@ -42,6 +49,9 @@ class InputSanitizer {
         'Input string cannot be null or undefined'
       );
     }
+
+    // Convert to string if not already
+    input = String(input).trim();
 
     const maxLength = options.maxLength || this.MAX_STRING_LENGTH;
     if (input.length > maxLength) {
@@ -53,23 +63,33 @@ class InputSanitizer {
     }
 
     if (options.stripHTML) {
-      // Remove all HTML tags
+      // Simple HTML stripping
       return input.replace(/<[^>]*>/g, '').trim();
     }
 
-    // Convert allowed attributes to array format expected by DOMPurify
-    const allowedAttrs = options.allowedAttributes
-      ? Object.values(options.allowedAttributes).flat()
-      : [];
+    // Use configured allowed tags and attributes or defaults
+    const allowedTags = options.allowedTags || this.ALLOWED_HTML_TAGS;
+    const allowedAttrs = options.allowedAttributes || this.ALLOWED_HTML_ATTRS;
 
-    // Use DOMPurify for HTML content with minimal configuration
-    return DOMPurify.sanitize(input, {
-      ALLOWED_TAGS: options.allowedTags,
-      ALLOWED_ATTR: allowedAttrs
-    }).trim();
+    try {
+      // Only import DOMPurify in browser environment
+      if (typeof window !== 'undefined') {
+        const { default: createDOMPurify } = await import('isomorphic-dompurify');
+        return createDOMPurify.sanitize(input, {
+          ALLOWED_TAGS: allowedTags,
+          ALLOWED_ATTR: Object.values(allowedAttrs).flat(),
+          ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
+        }).trim();
+      }
+    } catch (error) {
+      console.warn('DOMPurify not available, falling back to basic sanitization');
+    }
+
+    // Fallback sanitization for server-side or when DOMPurify fails
+    return input.replace(/<(?!\/?(p|br|strong|em|ul|li)(?=>|\s.*>))\/?.*?>/g, '').trim();
   }
 
-  sanitizeObject<T extends object>(obj: T, options: SanitizeOptions = {}): T {
+  async sanitizeObject<T extends object>(obj: T, options: SanitizeOptions = {}): Promise<T> {
     if (!obj || typeof obj !== 'object') {
       throw new PolkadotHubError(
         'Invalid input',
@@ -81,21 +101,28 @@ class InputSanitizer {
     try {
       const sanitized = { ...obj };
 
-      Object.entries(sanitized).forEach(([key, value]) => {
+      for (const [key, value] of Object.entries(sanitized)) {
+        if (value === null || value === undefined) {
+          continue;
+        }
+
         if (typeof value === 'string') {
-          (sanitized as any)[key] = this.sanitizeString(value, options);
-        } else if (value && typeof value === 'object' && !Array.isArray(value)) {
-          (sanitized as any)[key] = this.sanitizeObject(value, options);
+          (sanitized as any)[key] = await this.sanitizeString(value, options);
+        } else if (typeof value === 'object' && !Array.isArray(value)) {
+          (sanitized as any)[key] = await this.sanitizeObject(value, options);
         } else if (Array.isArray(value)) {
-          (sanitized as any)[key] = value.map(item =>
-            typeof item === 'string'
-              ? this.sanitizeString(item, options)
-              : typeof item === 'object' && item !== null
-              ? this.sanitizeObject(item, options)
-              : item
+          (sanitized as any)[key] = await Promise.all(
+            value.map(async (item) => {
+              if (item === null || item === undefined) return item;
+              return typeof item === 'string'
+                ? await this.sanitizeString(item, options)
+                : typeof item === 'object'
+                ? await this.sanitizeObject(item, options)
+                : item;
+            })
           );
         }
-      });
+      }
 
       return sanitized;
     } catch (error) {
@@ -117,6 +144,8 @@ class InputSanitizer {
       );
     }
 
+    address = String(address).trim();
+
     if (address.length > this.MAX_ADDRESS_LENGTH) {
       throw new PolkadotHubError(
         'Address too long',
@@ -125,8 +154,17 @@ class InputSanitizer {
       );
     }
 
-    // Remove any non-alphanumeric and non-special characters from addresses
-    return address.replace(/[^a-zA-Z0-9-_]/g, '').trim();
+    // Validate Polkadot address format (SS58)
+    const ss58Regex = /^[1-9A-HJ-NP-Za-km-z]{47,48}$/;
+    if (!ss58Regex.test(address)) {
+      throw new PolkadotHubError(
+        'Invalid address format',
+        'INVALID_INPUT',
+        'Address must be a valid SS58 format'
+      );
+    }
+
+    return address;
   }
 
   sanitizeAmount(amount: string): string {
@@ -138,6 +176,8 @@ class InputSanitizer {
       );
     }
 
+    amount = String(amount).trim();
+
     if (amount.length > this.MAX_AMOUNT_LENGTH) {
       throw new PolkadotHubError(
         'Amount too long',
@@ -147,14 +187,26 @@ class InputSanitizer {
     }
 
     // Only allow numbers and decimal point
-    const sanitized = amount.replace(/[^\d.]/g, '').trim();
+    const sanitized = amount.replace(/[^\d.]/g, '');
     
-    // Validate numeric format
-    if (!/^\d*\.?\d*$/.test(sanitized) || sanitized.split('.').length > 2) {
+    // Validate numeric format with proper decimal handling
+    const parts = sanitized.split('.');
+    if (!/^\d*\.?\d*$/.test(sanitized) || 
+        parts.length > 2 || 
+        (parts[1] && parts[1].length > 12)) {
       throw new PolkadotHubError(
         'Invalid amount format',
         'INVALID_INPUT',
-        'Amount must be a valid number with at most one decimal point'
+        'Amount must be a valid number with at most 12 decimal places'
+      );
+    }
+
+    // Ensure the amount is greater than 0
+    if (parseFloat(sanitized) <= 0) {
+      throw new PolkadotHubError(
+        'Invalid amount',
+        'INVALID_INPUT',
+        'Amount must be greater than 0'
       );
     }
 
@@ -170,6 +222,8 @@ class InputSanitizer {
       );
     }
 
+    chainId = String(chainId).trim();
+
     if (chainId.length > this.MAX_CHAIN_ID_LENGTH) {
       throw new PolkadotHubError(
         'Chain ID too long',
@@ -179,7 +233,18 @@ class InputSanitizer {
     }
 
     // Only allow alphanumeric characters and hyphens
-    return chainId.replace(/[^a-zA-Z0-9-]/g, '').trim();
+    const sanitized = chainId.replace(/[^a-zA-Z0-9-]/g, '');
+
+    // Ensure chain ID follows expected format
+    if (!/^[a-z0-9][-a-z0-9]*[a-z0-9]$/i.test(sanitized)) {
+      throw new PolkadotHubError(
+        'Invalid chain ID format',
+        'INVALID_INPUT',
+        'Chain ID must start and end with alphanumeric characters'
+      );
+    }
+
+    return sanitized;
   }
 
   validateJSON(json: string): boolean {
@@ -202,11 +267,8 @@ class InputSanitizer {
       }
       return true;
     } catch (error) {
-      if (error instanceof PolkadotHubError) {
-        throw error;
-      }
       throw new PolkadotHubError(
-        'Invalid JSON',
+        'Invalid JSON format',
         'INVALID_INPUT',
         'Failed to parse JSON string',
         error as Error
@@ -214,7 +276,7 @@ class InputSanitizer {
     }
   }
 
-  sanitizeBridgeInput(input: BridgeInput): BridgeInput {
+  async sanitizeBridgeInput(input: BridgeInput): Promise<BridgeInput> {
     if (!input || typeof input !== 'object') {
       throw new PolkadotHubError(
         'Invalid bridge input',
@@ -223,21 +285,12 @@ class InputSanitizer {
       );
     }
 
-    try {
-      return {
-        fromChainId: this.sanitizeChainId(input.fromChainId),
-        toChainId: this.sanitizeChainId(input.toChainId),
-        amount: this.sanitizeAmount(input.amount),
-        recipient: this.sanitizeAddress(input.recipient)
-      };
-    } catch (error) {
-      throw new PolkadotHubError(
-        'Bridge input sanitization failed',
-        'SANITIZATION_ERROR',
-        'Failed to sanitize bridge input',
-        error as Error
-      );
-    }
+    return {
+      fromChainId: this.sanitizeChainId(input.fromChainId),
+      toChainId: this.sanitizeChainId(input.toChainId),
+      amount: this.sanitizeAmount(input.amount),
+      recipient: this.sanitizeAddress(input.recipient)
+    };
   }
 }
 

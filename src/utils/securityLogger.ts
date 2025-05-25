@@ -3,10 +3,12 @@ import { PolkadotHubError } from './errorHandling';
 export enum SecurityEventType {
   AUTH_ATTEMPT = 'auth_attempt',
   INVALID_TOKEN = 'invalid_token',
+  INVALID_ORIGIN = 'invalid_origin',
   RATE_LIMIT_EXCEEDED = 'rate_limit_exceeded',
   SUSPICIOUS_IP = 'suspicious_ip',
   INVALID_INPUT = 'invalid_input',
-  API_ERROR = 'api_error'
+  API_ERROR = 'api_error',
+  MIDDLEWARE_ERROR = 'middleware_error'
 }
 
 interface SecurityEvent {

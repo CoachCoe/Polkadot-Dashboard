@@ -17,12 +17,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const sanitizedAddress = inputSanitizer.sanitizeAddress(address);
-    const sanitizedSignature = signature.replace(/[^0-9a-fA-F]/g, '');
+    // Sanitize inputs
+    const sanitizedInput = await inputSanitizer.sanitizeObject({
+      address,
+      signature,
+      challenge
+    });
 
     const isValid = await authService.verifySignature(
-      sanitizedAddress,
-      sanitizedSignature
+      sanitizedInput.address,
+      sanitizedInput.signature
     );
 
     if (!isValid) {
@@ -31,8 +35,9 @@ export async function POST(request: NextRequest) {
         'AUTH_INVALID_SIGNATURE'
       );
     }
+
     const sessionId = await authService.createSession(
-      sanitizedAddress,
+      sanitizedInput.address,
       ip,
       userAgent
     );
@@ -67,7 +72,7 @@ export async function POST(request: NextRequest) {
           code: error.code,
           details: error.details
         },
-        { status: 401 }
+        { status: 400 }
       );
     }
 
@@ -92,8 +97,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const sanitizedAddress = inputSanitizer.sanitizeAddress(address);
-    const challenge = await authService.generateChallenge(sanitizedAddress);
+    const sanitizedInput = await inputSanitizer.sanitizeObject({ address });
+    const challenge = await authService.generateChallenge(sanitizedInput.address);
 
     return NextResponse.json({ challenge });
   } catch (error) {
@@ -121,58 +126,6 @@ export async function GET(request: NextRequest) {
       {
         message: 'Failed to generate challenge',
         code: 'AUTH_CHALLENGE_FAILED'
-      },
-      { status: 500 }
-    );
-  }
-}
-
-export async function DELETE(request: NextRequest) {
-  try {
-    const sessionId = request.cookies.get('session_id')?.value;
-
-    if (!sessionId) {
-      throw new PolkadotHubError(
-        'No active session',
-        'AUTH_NO_SESSION'
-      );
-    }
-
-    await authService.logout(sessionId);
-
-    const response = NextResponse.json(
-      { message: 'Logged out successfully' },
-      { status: 200 }
-    );
-
-    response.cookies.delete('session_id');
-
-    return response;
-  } catch (error) {
-    await securityLogger.logEvent({
-      type: SecurityEventType.API_ERROR,
-      timestamp: new Date().toISOString(),
-      details: {
-        error: String(error),
-        endpoint: '/api/auth'
-      }
-    });
-
-    if (error instanceof PolkadotHubError) {
-      return NextResponse.json(
-        {
-          message: error.message,
-          code: error.code,
-          details: error.details
-        },
-        { status: 400 }
-      );
-    }
-
-    return NextResponse.json(
-      {
-        message: 'Logout failed',
-        code: 'AUTH_LOGOUT_FAILED'
       },
       { status: 500 }
     );

@@ -44,7 +44,7 @@ export default async function RootLayout({
           <footer className="bg-white border-t border-gray-200 mt-auto">
             <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
               <div className="text-center text-sm text-gray-500">
-                © {new Date().getFullYear()} Polkadot Dashboard. Built with ❤️ for the Polkadot community.
+                © {new Date().getFullYear()} Polkadot Dashboard. Built with ♥ for the Polkadot community.
               </div>
             </div>
           </footer>

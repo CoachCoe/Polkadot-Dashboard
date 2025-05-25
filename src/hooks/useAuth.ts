@@ -34,7 +34,7 @@ export function useAuth() {
             error: new PolkadotHubError(
               'No wallet extension found',
               'NO_EXTENSION',
-              'Connect your wallet to authenticate with Polkadot Dashboard.'
+              'Please install the Polkadot.js extension to connect your wallet.'
             )
           }));
           return;
@@ -63,27 +63,19 @@ export function useAuth() {
 
   const login = useCallback(async () => {
     if (!authState.isInitialized) {
-      setAuthState(prev => ({
-        ...prev,
-        error: new PolkadotHubError(
-          'Wallet extension not initialized',
-          'WALLET_NOT_INITIALIZED',
-          'Please wait for the wallet extension to initialize.'
-        )
-      }));
-      return;
+      throw new PolkadotHubError(
+        'Wallet extension not initialized',
+        'WALLET_NOT_INITIALIZED',
+        'Please wait for the wallet extension to initialize.'
+      );
     }
 
     if (!selectedAccount || !signer) {
-      setAuthState(prev => ({
-        ...prev,
-        error: new PolkadotHubError(
-          'Please connect your wallet first',
-          'AUTH_NO_WALLET',
-          'Connect your wallet to authenticate with Polkadot Dashboard.'
-        )
-      }));
-      return;
+      throw new PolkadotHubError(
+        'Please connect your wallet first',
+        'AUTH_NO_WALLET',
+        'Connect your wallet to authenticate with Polkadot Dashboard.'
+      );
     }
 
     try {
@@ -133,66 +125,66 @@ export function useAuth() {
       if (!authResponse.ok) {
         const error = await authResponse.json();
         throw new PolkadotHubError(
-          error.message || 'Failed to authenticate',
+          error.message || 'Authentication failed',
           error.code || 'AUTH_FAILED',
           error.details
         );
       }
 
-      router.refresh();
+      setAuthState(prev => ({ ...prev, error: null }));
     } catch (error) {
-      setAuthState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof PolkadotHubError ? error : new PolkadotHubError(
-          'Failed to authenticate',
-          'AUTH_FAILED',
-          error instanceof Error ? error.message : 'An unknown error occurred'
-        )
-      }));
+      const handledError = error instanceof PolkadotHubError ? error : new PolkadotHubError(
+        'Authentication failed',
+        'AUTH_FAILED',
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      );
+      setAuthState(prev => ({ ...prev, error: handledError }));
+      throw handledError;
     } finally {
       setAuthState(prev => ({ ...prev, isLoading: false }));
     }
-  }, [selectedAccount, signer, router, authState.isInitialized]);
+  }, [selectedAccount, signer, authState.isInitialized]);
 
   const logout = useCallback(async () => {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
-      const response = await fetch('/api/auth', {
-        method: 'DELETE',
-        credentials: 'include'
+      const response = await fetch('/api/auth/logout', { 
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        }
       });
-
+      
       if (!response.ok) {
         const error = await response.json();
         throw new PolkadotHubError(
           error.message || 'Failed to logout',
-          error.code || 'AUTH_LOGOUT_FAILED',
+          error.code || 'LOGOUT_FAILED',
           error.details
         );
       }
 
+      setAuthState(prev => ({ ...prev, error: null }));
       router.push('/');
-      router.refresh();
     } catch (error) {
-      setAuthState(prev => ({
-        ...prev,
-        isLoading: false,
-        error: error instanceof PolkadotHubError ? error : new PolkadotHubError(
-          'Failed to logout',
-          'AUTH_LOGOUT_FAILED',
-          error instanceof Error ? error.message : 'An unknown error occurred'
-        )
-      }));
+      const handledError = error instanceof PolkadotHubError ? error : new PolkadotHubError(
+        'Logout failed',
+        'LOGOUT_FAILED',
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      );
+      setAuthState(prev => ({ ...prev, error: handledError }));
+      throw handledError;
     } finally {
       setAuthState(prev => ({ ...prev, isLoading: false }));
     }
   }, [router]);
 
   return {
-    ...authState,
+    isLoading: authState.isLoading,
+    error: authState.error,
+    isInitialized: authState.isInitialized,
     login,
-    logout,
+    logout
   };
 } 

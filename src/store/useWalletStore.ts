@@ -61,15 +61,7 @@ export const useWalletStore = create<WalletState>((set) => ({
       }
 
       // Dynamically import Polkadot extension modules
-      const extensionDapp = await import('@polkadot/extension-dapp').catch((err) => {
-        console.error('Failed to load extension-dapp:', err);
-        throw new PolkadotHubError(
-          'Failed to load wallet extension',
-          'EXTENSION_LOAD_ERROR',
-          'There was a problem loading the wallet extension module.'
-        );
-      });
-
+      const extensionDapp = await import('@polkadot/extension-dapp');
       if (!extensionDapp) {
         throw new PolkadotHubError(
           'Wallet extension module not available',
@@ -92,34 +84,36 @@ export const useWalletStore = create<WalletState>((set) => ({
         );
       }
 
-      // Request accounts with explicit timeout
-      const accountsPromise = web3Accounts();
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Account request timeout')), 20000) // 20s timeout
-      );
+      // Request accounts with explicit timeout and retries
+      const getAccounts = async (maxRetries = 3) => {
+        for (let i = 0; i < maxRetries; i++) {
+          try {
+            const accounts = await Promise.race([
+              web3Accounts(),
+              new Promise((_, reject) => 
+                setTimeout(() => reject(new Error('Account request timeout')), 10000)
+              )
+            ]);
+            
+            if (Array.isArray(accounts) && accounts.length > 0) {
+              return accounts;
+            }
+            
+            // If no accounts found but no error, wait before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000));
+          } catch (err) {
+            if (i === maxRetries - 1) throw err; // Throw on last retry
+            await new Promise(resolve => setTimeout(resolve, 1000)); // Wait before retry
+          }
+        }
+        throw new PolkadotHubError(
+          'No accounts found after retries',
+          'NO_ACCOUNTS',
+          'Please create or import an account in your wallet extension.'
+        );
+      };
       
-      const allAccounts = await Promise.race([accountsPromise, timeoutPromise])
-        .catch((err) => {
-          if (err.message === 'Account request timeout') {
-            throw new PolkadotHubError(
-              'Account request timed out',
-              'ACCOUNT_REQUEST_TIMEOUT',
-              'Please check your wallet extension and try again. Make sure to accept any permission requests.'
-            );
-          }
-          if (err.message?.includes('Authorization')) {
-            throw new PolkadotHubError(
-              'Wallet access denied',
-              'WALLET_ACCESS_DENIED',
-              'Please accept the connection request in your wallet extension.'
-            );
-          }
-          throw new PolkadotHubError(
-            'Failed to get accounts',
-            'ACCOUNT_REQUEST_ERROR',
-            err instanceof Error ? err.message : 'Unknown error occurred while requesting accounts'
-          );
-        }) as any[];
+      const allAccounts = await getAccounts();
       
       if (!Array.isArray(allAccounts) || allAccounts.length === 0) {
         throw new PolkadotHubError(

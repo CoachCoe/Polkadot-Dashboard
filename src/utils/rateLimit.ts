@@ -1,51 +1,55 @@
-interface RateLimitInfo {
+interface RateLimitResponse {
   success: boolean;
   limit: number;
   remaining: number;
   reset: number;
 }
 
-interface TokenBucket {
-  tokens: number;
-  lastRefill: number;
-}
+class RateLimiter {
+  private static instance: RateLimiter;
+  private requests: Map<string, { timestamps: number[]; resetTime: number }> = new Map();
+  private readonly MAX_REQUESTS = 60; // 60 requests
+  private readonly TIME_WINDOW = 60000; // per minute (in milliseconds)
 
-const RATE_LIMIT_WINDOW = 60000; // 1 minute in milliseconds
-const MAX_REQUESTS = 60; // Maximum requests per minute
-const tokenBuckets = new Map<string, TokenBucket>();
+  private constructor() {}
 
-export async function rateLimit(identifier: string): Promise<RateLimitInfo> {
-  const now = Date.now();
-  const bucket = tokenBuckets.get(identifier) || {
-    tokens: MAX_REQUESTS,
-    lastRefill: now
-  };
-
-  // Calculate tokens to add based on time elapsed
-  const timeElapsed = now - bucket.lastRefill;
-  const tokensToAdd = Math.floor(timeElapsed / (RATE_LIMIT_WINDOW / MAX_REQUESTS));
-  
-  // Refill tokens
-  bucket.tokens = Math.min(MAX_REQUESTS, bucket.tokens + tokensToAdd);
-  bucket.lastRefill = now;
-
-  // Check if request can be allowed
-  if (bucket.tokens > 0) {
-    bucket.tokens--;
-    tokenBuckets.set(identifier, bucket);
-    
-    return {
-      success: true,
-      limit: MAX_REQUESTS,
-      remaining: bucket.tokens,
-      reset: bucket.lastRefill + RATE_LIMIT_WINDOW
-    };
+  static getInstance(): RateLimiter {
+    if (!RateLimiter.instance) {
+      RateLimiter.instance = new RateLimiter();
+    }
+    return RateLimiter.instance;
   }
 
-  return {
-    success: false,
-    limit: MAX_REQUESTS,
-    remaining: 0,
-    reset: bucket.lastRefill + RATE_LIMIT_WINDOW
-  };
-} 
+  async checkLimit(ip: string): Promise<RateLimitResponse> {
+    const now = Date.now();
+    const requestInfo = this.requests.get(ip) || { timestamps: [], resetTime: now + this.TIME_WINDOW };
+    
+    // Clean up old timestamps
+    requestInfo.timestamps = requestInfo.timestamps.filter(time => now - time < this.TIME_WINDOW);
+    
+    // Update reset time if window has passed
+    if (now >= requestInfo.resetTime) {
+      requestInfo.resetTime = now + this.TIME_WINDOW;
+      requestInfo.timestamps = [];
+    }
+
+    const remaining = Math.max(0, this.MAX_REQUESTS - requestInfo.timestamps.length);
+    const success = remaining > 0;
+
+    if (success) {
+      requestInfo.timestamps.push(now);
+    }
+
+    this.requests.set(ip, requestInfo);
+
+    return {
+      success,
+      limit: this.MAX_REQUESTS,
+      remaining,
+      reset: requestInfo.resetTime
+    };
+  }
+}
+
+export const rateLimiter = RateLimiter.getInstance();
+export const rateLimit = (ip: string) => rateLimiter.checkLimit(ip); 

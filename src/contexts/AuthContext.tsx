@@ -17,7 +17,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const { connect: connectWallet, disconnect: disconnectWallet, error: walletError } = useWalletStore();
+  const { selectedAccount, disconnect: disconnectWallet, error: walletError } = useWalletStore();
   const { login, logout, isLoading, error: authError } = useAuth();
   const [error, setError] = useState<PolkadotHubError | null>(null);
 
@@ -41,7 +41,22 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const connect = async () => {
     try {
       setError(null);
-      await connectWallet();
+
+      // Wait for selectedAccount to be available
+      if (!selectedAccount) {
+        throw new PolkadotHubError(
+          'Please connect your wallet first',
+          'AUTH_NO_WALLET',
+          'Connect your wallet to authenticate with Polkadot Dashboard.'
+        );
+      }
+
+      // Check if we're already authenticated
+      if (isAuthenticated) {
+        return;
+      }
+      
+      // Attempt to login
       await login();
       setIsAuthenticated(true);
     } catch (err) {
@@ -51,7 +66,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setError(new PolkadotHubError(
           err instanceof Error ? err.message : 'Failed to connect wallet',
-          'WALLET_CONNECTION_ERROR'
+          'WALLET_CONNECTION_ERROR',
+          'Please try again or refresh the page.'
         ));
       }
       throw err;
@@ -61,8 +77,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const disconnect = async () => {
     try {
       setError(null);
+      
+      // First logout from the server
       await logout();
+      
+      // Then disconnect the wallet
       await disconnectWallet();
+      
+      // Finally, update the authentication state
       setIsAuthenticated(false);
     } catch (err) {
       // Still set as not authenticated even if logout fails
@@ -72,7 +94,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       } else {
         setError(new PolkadotHubError(
           err instanceof Error ? err.message : 'Failed to disconnect wallet',
-          'WALLET_DISCONNECT_ERROR'
+          'WALLET_DISCONNECT_ERROR',
+          'Please try again or refresh the page.'
         ));
       }
       throw err;
