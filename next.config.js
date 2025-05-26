@@ -36,7 +36,7 @@ const nextConfig = {
     unoptimized: true,
   },
   basePath: '/Polkadot-Dashboard',
-  assetPrefix: '/Polkadot-Dashboard/',
+  assetPrefix: '/Polkadot-Dashboard',
 }
 
 module.exports = nextConfig 

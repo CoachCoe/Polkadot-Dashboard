@@ -9,6 +9,7 @@ interface AuthChallenge {
 
 class AuthService {
   private static instance: AuthService;
+  private readonly SESSION_KEY = 'polkadot_dashboard_session';
 
   private constructor() {}
 
@@ -51,15 +52,27 @@ class AuthService {
         );
       }
 
-      // For static export, we'll use a simple session token
-      return Buffer.from(`${address}:${Date.now()}`).toString('base64');
+      // Create a simple session token
+      const sessionToken = Buffer.from(`${address}:${Date.now()}`).toString('base64');
+
+      // Store in localStorage
+      if (typeof window !== 'undefined') {
+        localStorage.setItem(this.SESSION_KEY, sessionToken);
+      }
+
+      return sessionToken;
     } catch (error) {
       throw error;
     }
   }
 
-  async verifySession(sessionToken: string): Promise<boolean> {
+  async verifySession(sessionToken?: string): Promise<boolean> {
     try {
+      // If no token provided, try to get from localStorage
+      if (!sessionToken && typeof window !== 'undefined') {
+        sessionToken = localStorage.getItem(this.SESSION_KEY) || undefined;
+      }
+
       if (!sessionToken) return false;
 
       const [address, timestamp] = Buffer.from(sessionToken, 'base64')
@@ -69,9 +82,22 @@ class AuthService {
       if (!address || !timestamp) return false;
 
       const tokenAge = Date.now() - parseInt(timestamp);
-      return tokenAge <= 24 * 60 * 60 * 1000; // 24 hours
+      const isValid = tokenAge <= 24 * 60 * 60 * 1000; // 24 hours
+
+      // Clear invalid session from localStorage
+      if (!isValid && typeof window !== 'undefined') {
+        localStorage.removeItem(this.SESSION_KEY);
+      }
+
+      return isValid;
     } catch (error) {
       return false;
+    }
+  }
+
+  clearSession(): void {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem(this.SESSION_KEY);
     }
   }
 }

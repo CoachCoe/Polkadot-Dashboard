@@ -1,6 +1,7 @@
 import { ecosystemService } from '@/services/ecosystem';
 import { ProjectDetails } from '@/components/ecosystem/ProjectDetails';
 import type { Project } from '@/services/ecosystem';
+import { notFound } from 'next/navigation';
 
 // This function runs at build time to generate all possible project pages
 export async function generateStaticParams() {
@@ -16,7 +17,7 @@ export default async function ProjectDetailPage({ params }: { params: { id: stri
   const project = ecosystemService.getProjectById(params.id);
   
   if (!project) {
-    return null; // This will show the not-found page
+    notFound();
   }
 
   return <ProjectDetails id={params.id} project={project} />;
