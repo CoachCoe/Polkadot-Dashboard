@@ -13,6 +13,12 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      NEXTAUTH_URL: https://coachcoe.github.io/Polkadot-Dashboard
+      NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
+      ENCRYPTION_KEY: ${{ secrets.ENCRYPTION_KEY }}
+      NEXT_PUBLIC_SUBSCAN_API_KEY: ${{ secrets.NEXT_PUBLIC_SUBSCAN_API_KEY }}
+      NEXT_PUBLIC_COINGECKO_API_KEY: ${{ secrets.NEXT_PUBLIC_COINGECKO_API_KEY }}
     steps:
       - uses: actions/checkout@v4
       
