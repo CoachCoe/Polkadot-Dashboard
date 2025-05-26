@@ -45,10 +45,6 @@ const nextConfig = {
             value: 'max-age=63072000; includeSubDomains; preload'
           },
           {
-            key: 'X-Frame-Options',
-            value: 'DENY'
-          },
-          {
             key: 'X-Content-Type-Options',
             value: 'nosniff'
           },
@@ -57,28 +53,17 @@ const nextConfig = {
             value: 'strict-origin-when-cross-origin'
           },
           {
-            key: 'Permissions-Policy',
-            value: 'accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), cross-origin-isolated=(), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=(), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(), midi=(), navigation-override=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(), xr-spatial-tracking=(), clipboard-read=(), clipboard-write=(), gamepad=(), speaker-selection=(), conversion-measurement=(), focus-without-user-activation=(), hid=(), idle-detection=(), interest-cohort=(), serial=(), sync-script=(), trust-token-redemption=(), window-placement=(), vertical-scroll=()'
-          },
-          {
             key: 'Content-Security-Policy',
             value: [
-              "default-src 'none'",
-              "script-src 'self' 'nonce-{NONCE}' 'strict-dynamic'",
-              "style-src 'self' 'nonce-{NONCE}'",
+              "default-src 'self'",
+              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+              "style-src 'self' 'unsafe-inline'",
               "img-src 'self' data: https: blob:",
               "font-src 'self' data: https://fonts.gstatic.com",
-              "connect-src 'self' https://api.polkadot.io https://api.coingecko.com wss://rpc.polkadot.io",
-              "frame-ancestors 'none'",
-              "form-action 'self'",
-              "base-uri 'none'",
-              "object-src 'none'",
-              "manifest-src 'self'",
-              "media-src 'none'",
-              "worker-src 'self' blob:",
-              "sandbox allow-forms allow-scripts allow-same-origin allow-popups",
-              "upgrade-insecure-requests",
-              "block-all-mixed-content"
+              "connect-src 'self' https: wss:",
+              "frame-src 'self'",
+              "media-src 'self'",
+              "worker-src 'self' blob:"
             ].join('; ')
           }
         ]
