@@ -13,7 +13,6 @@ import {
 } from '@heroicons/react/24/outline';
 import { DashboardLayout } from '@/components/layouts/DashboardLayout';
 import type { Project, ProjectStats } from '@/services/ecosystem';
-import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 
 interface DetailedStats extends ProjectStats {
   isStale?: boolean;
@@ -24,7 +23,7 @@ interface ProjectDetailsProps {
   project: Project;
 }
 
-export function ProjectDetails({ id, project: initialProject }: ProjectDetailsProps) {
+export function ProjectDetails({ project: initialProject }: ProjectDetailsProps) {
   const [project] = useState<Project>(initialProject);
   const [stats] = useState<DetailedStats>({
     tvl: initialProject.stats.tvl || '',
