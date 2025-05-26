@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
 import { governanceService, type Referendum, type DelegationInfo, type Track } from '@/services/governance';
 import { PolkadotHubError } from '@/utils/errorHandling';
+import type { AddressOrPair } from '@polkadot/api/types';
 
 export function useGovernance() {
   const { selectedAccount, signer } = useWalletStore();
@@ -16,7 +17,7 @@ export function useGovernance() {
 
   useEffect(() => {
     if (selectedAccount) {
-      loadData();
+      void loadData();
     }
   }, [selectedAccount]);
 
@@ -65,8 +66,7 @@ export function useGovernance() {
     try {
       setIsLoading(true);
       setError(null);
-      const tx = await governanceService.castVote(referendumIndex, vote, amount);
-      await tx.signAndSend(selectedAccount.address, { signer });
+      await governanceService.vote(referendumIndex, vote, amount, selectedAccount.address as AddressOrPair);
       await loadData(); // Refresh data after voting
     } catch (err) {
       const errorMessage = err instanceof PolkadotHubError 
@@ -92,8 +92,7 @@ export function useGovernance() {
     try {
       setIsLoading(true);
       setError(null);
-      const tx = await governanceService.delegateVotes(trackId, target, amount, conviction);
-      await tx.signAndSend(selectedAccount.address, { signer });
+      await governanceService.delegate(trackId, target, amount, conviction, selectedAccount.address as AddressOrPair);
       await loadData(); // Refresh data after delegating
     } catch (err) {
       const errorMessage = err instanceof PolkadotHubError 
@@ -119,8 +118,7 @@ export function useGovernance() {
     try {
       setIsLoading(true);
       setError(null);
-      const tx = await governanceService.undelegateVotes(trackId);
-      await tx.signAndSend(selectedAccount.address, { signer });
+      await governanceService.undelegate(trackId, selectedAccount.address as AddressOrPair);
       await loadData(); // Refresh data after undelegating
     } catch (err) {
       const errorMessage = err instanceof PolkadotHubError 

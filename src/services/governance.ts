@@ -1,45 +1,102 @@
 import { ApiPromise } from '@polkadot/api';
-import { Codec } from '@polkadot/types/types';
 import { polkadotService } from './polkadot';
 import { handleError, PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
-import { securityLogger, SecurityEventType } from '@/utils/securityLogger';
-import type { Option } from '@polkadot/types';
-import { BN } from '@polkadot/util';
+import { formatBalance } from '@polkadot/util';
+import type { ISubmittableResult } from '@polkadot/types/types';
+import type { AnyTuple, Codec } from '@polkadot/types/types';
+import type { AddressOrPair } from '@polkadot/api/types';
+
+interface ReferendumInfoJSON {
+  track: string;
+  proposal: {
+    title?: string;
+    description?: string;
+  };
+  proposer: string;
+  status: {
+    type: string;
+    deciding?: {
+      since: string | number;
+    };
+    confirming?: {
+      since: string | number;
+    };
+    completed?: {
+      at: string | number;
+    };
+  };
+  submittedAt: string | number;
+  deposit: string | number;
+  tally: {
+    ayes: string | number;
+    nays: string | number;
+    support: string | number;
+  };
+}
+
+interface TrackJSON {
+  name: string;
+  description: string;
+  minDeposit: string | number;
+  decisionPeriod: string | number;
+  preparePeriod: string | number;
+  decidingPeriod: string | number;
+  confirmPeriod: string | number;
+  minApproval: string | number;
+  minSupport: string | number;
+}
+
+interface DelegationJSON {
+  isDelegating: boolean;
+  asDelegating?: {
+    target: string;
+    balance: string | number;
+    conviction: string | number;
+    delegatedAt: string | number;
+  };
+}
 
 export interface Referendum {
   index: number;
   track: string;
   title: string;
   description: string;
-  status: 'Preparing' | 'Deciding' | 'Confirming' | 'Completed';
+  proposer: string;
+  status: string;
+  submittedAt: string;
+  deposit: string;
   tally: {
     ayes: string;
     nays: string;
     support: string;
   };
-  enactmentPeriod: string;
-  submittedBy: string;
-  submittedAt: string;
+  timeline: {
+    created: number;
+    deciding: number | null;
+    confirming: number | null;
+    completed: number | null;
+  };
 }
 
 export interface DelegationInfo {
+  trackId: number;
   target: string;
   amount: string;
   conviction: number;
-  trackId: number;
-  delegatedAt: string;
+  delegatedAt: number;
 }
 
 export interface Track {
   id: number;
   name: string;
   description: string;
-  stats?: {
-    activeProposals: number;
-    totalProposals: number;
-    delegations: number;
-    averageTurnout: number;
-  };
+  minDeposit: string;
+  decisionPeriod: number;
+  preparePeriod: number;
+  decidingPeriod: number;
+  confirmPeriod: number;
+  minApproval: number;
+  minSupport: number;
 }
 
 class GovernanceService {
@@ -76,182 +133,58 @@ class GovernanceService {
   async getReferenda(): Promise<Referendum[]> {
     try {
       const api = await this.getApi();
-      
-      if (!api.query?.referenda?.referendumCount || !api.query?.referenda?.referendumInfoFor) {
+      if (!api.query.referenda?.referendumInfoFor) {
         throw new PolkadotHubError(
           'Governance API not available',
-          ErrorCodes.NETWORK.API_ERROR,
-          'The governance API endpoints are not available. Please try again later.'
+          ErrorCodes.API.ERROR,
+          'The governance API endpoints are not available. Please try again.'
         );
       }
 
-      const activeReferenda = await api.query.referenda.referendumInfoFor.entries();
-      
-      const referenda = await Promise.all(
-        activeReferenda.map(async ([key, info]) => {
-          try {
-            const index = (key.args[0] as unknown as BN).toNumber();
-            
-            const referendumInfo = info as unknown as Option<Codec>;
-            if (referendumInfo.isNone) {
-              throw new PolkadotHubError(
-                'Invalid referendum info',
-                ErrorCodes.VALIDATION.INVALID_INFO,
-                `Referendum #${index} information is not available.`
-              );
-            }
-
-            const infoValue = referendumInfo.unwrap();
-            const status = this.getReferendumStatus(infoValue);
-            
-            // Handle different referendum states
-            if ((infoValue as any).isOngoing) {
-              const ongoing = (infoValue as any).asOngoing;
-              const hash = ongoing.proposal.hash.toHex();
-              
-              if (!api.query?.preimage?.preimageFor) {
-                throw new PolkadotHubError(
-                  'Preimage API not available',
-                  ErrorCodes.NETWORK.API_ERROR,
-                  'The preimage API endpoint is not available. Please try again later.'
-                );
-              }
-
-              const preimage = await api.query.preimage.preimageFor(hash) as Option<Codec>;
-              const preimageData = preimage.unwrapOr(null);
-              
-              if (!preimageData) {
-                // Don't throw here, just log a warning and continue with placeholder data
-                await securityLogger.logEvent({
-                  type: SecurityEventType.API_ERROR,
-                  timestamp: new Date().toISOString(),
-                  details: {
-                    warning: `Missing preimage data for referendum #${index}`,
-                    hash
-                  }
-                });
-
-                return {
-                  index,
-                  track: ongoing.track.toString(),
-                  title: `Referendum #${index}`,
-                  description: 'Preimage data not available.',
-                  status,
-                  tally: {
-                    ayes: ongoing.tally.ayes.toString(),
-                    nays: ongoing.tally.nays.toString(),
-                    support: ongoing.tally.support.toString(),
-                  },
-                  enactmentPeriod: ongoing.enactment.toString(),
-                  submittedBy: ongoing.submittedBy.toString(),
-                  submittedAt: ongoing.submittedAt.toString()
-                };
-              }
-
-              return {
-                index,
-                track: ongoing.track.toString(),
-                title: `Referendum #${index}`,
-                description: preimageData.toString(),
-                status,
-                tally: {
-                  ayes: ongoing.tally.ayes.toString(),
-                  nays: ongoing.tally.nays.toString(),
-                  support: ongoing.tally.support.toString(),
-                },
-                enactmentPeriod: ongoing.enactment.toString(),
-                submittedBy: ongoing.submittedBy.toString(),
-                submittedAt: ongoing.submittedAt.toString()
-              };
-            } else if ((infoValue as any).isApproved || (infoValue as any).isRejected || (infoValue as any).isCancelled || (infoValue as any).isTimedOut) {
-              // For completed referenda, return basic information
-              return {
-                index,
-                track: '0', // Default track for completed referenda
-                title: `Referendum #${index}`,
-                description: 'This referendum has been completed.',
-                status: 'Completed' as const,
-                tally: {
-                  ayes: '0',
-                  nays: '0',
-                  support: '0'
-                },
-                enactmentPeriod: '0',
-                submittedBy: '',
-                submittedAt: ''
-              };
-            } else {
-              // For any other state, return a placeholder
-              return {
-                index,
-                track: '0',
-                title: `Referendum #${index}`,
-                description: 'This referendum is in preparation.',
-                status,
-                tally: {
-                  ayes: '0',
-                  nays: '0',
-                  support: '0'
-                },
-                enactmentPeriod: '0',
-                submittedBy: '',
-                submittedAt: ''
-              };
-            }
-          } catch (error) {
-            // Log the error but don't fail the entire request
-            await securityLogger.logEvent({
-              type: SecurityEventType.API_ERROR,
-              timestamp: new Date().toISOString(),
-              details: {
-                error: String(error),
-                referendumIndex: key.args[0]?.toString() || 'unknown'
-              }
-            });
-
-            // Return a placeholder for failed referenda
-            return {
-              index: (key.args[0] as unknown as BN).toNumber(),
-              track: '0',
-              title: `Referendum #${(key.args[0] as unknown as BN).toNumber()}`,
-              description: 'Failed to load referendum data.',
-              status: 'Preparing' as const,
-              tally: {
-                ayes: '0',
-                nays: '0',
-                support: '0'
-              },
-              enactmentPeriod: '0',
-              submittedBy: '',
-              submittedAt: ''
-            };
-          }
-        })
-      );
-
-      // Filter out any null values that might have occurred during processing
-      return referenda.filter(Boolean);
-    } catch (error) {
-      // Log the error with more context
-      await securityLogger.logEvent({
-        type: SecurityEventType.API_ERROR,
-        timestamp: new Date().toISOString(),
-        details: {
-          error: String(error),
-          component: 'GovernanceService',
-          method: 'getReferenda'
+      const referendaEntries = await api.query.referenda.referendumInfoFor.entries();
+      const referenda = referendaEntries.map(([key, value]: [{ args: AnyTuple }, Codec]) => {
+        const index = (key.args[0] as unknown as { toNumber(): number }).toNumber();
+        const rawInfo = value.toJSON() as unknown;
+        
+        if (!rawInfo || typeof rawInfo !== 'object') {
+          throw new PolkadotHubError(
+            'Invalid referendum data',
+            ErrorCodes.DATA.INVALID,
+            `Failed to parse referendum data for index ${index}`
+          );
         }
+
+        const info = rawInfo as ReferendumInfoJSON;
+
+        return {
+          index,
+          track: String(info.track),
+          title: info.proposal?.title || `Referendum #${index}`,
+          description: info.proposal?.description || '',
+          proposer: String(info.proposer),
+          status: String(info.status.type),
+          submittedAt: String(info.submittedAt),
+          deposit: formatBalance(info.deposit, { decimals: 10 }),
+          tally: {
+            ayes: formatBalance(info.tally.ayes, { decimals: 10 }),
+            nays: formatBalance(info.tally.nays, { decimals: 10 }),
+            support: formatBalance(info.tally.support, { decimals: 10 })
+          },
+          timeline: {
+            created: Number(info.submittedAt),
+            deciding: info.status.deciding?.since ? Number(info.status.deciding.since) : null,
+            confirming: info.status.confirming?.since ? Number(info.status.confirming.since) : null,
+            completed: info.status.completed?.at ? Number(info.status.completed.at) : null
+          }
+        };
       });
 
-      if (error instanceof PolkadotHubError) {
-        throw error;
-      }
-
+      return referenda;
+    } catch (error) {
       throw new PolkadotHubError(
-        'Failed to load governance data',
-        ErrorCodes.DATA.ECOSYSTEM_LOAD_ERROR,
-        'Unable to fetch referenda information. Please try again later.',
-        error
+        'Failed to fetch referenda',
+        ErrorCodes.DATA.NOT_FOUND,
+        'Could not load governance referenda. Please try again.'
       );
     }
   }
@@ -259,212 +192,172 @@ class GovernanceService {
   async getTracks(): Promise<Track[]> {
     try {
       const api = await this.getApi();
-      
-      if (!api.query?.referenda?.trackQueue) {
+      if (!api.query.referenda?.tracks) {
         throw new PolkadotHubError(
-          'API not ready',
-          ErrorCodes.NETWORK.API_ERROR,
-          'The track queue API is not properly initialized.'
+          'Governance API not available',
+          ErrorCodes.API.ERROR,
+          'The governance API endpoints are not available. Please try again.'
         );
       }
 
-      const [tracks, referenda] = await Promise.all([
-        api.query.referenda.trackQueue.entries(),
-        this.getReferenda()
-      ]);
+      const tracksData = await api.query.referenda.tracks();
+      const rawTracks = tracksData.toJSON() as unknown;
+      
+      if (!rawTracks || !Array.isArray(rawTracks)) {
+        throw new PolkadotHubError(
+          'Invalid tracks data',
+          ErrorCodes.DATA.INVALID,
+          'Failed to parse tracks data'
+        );
+      }
 
-      return tracks.map(([key, _]) => {
-        const trackId = (key.args[0] as unknown as BN).toNumber();
-        const trackReferenda = referenda.filter(ref => ref.track === trackId.toString());
-        const activeProposals = trackReferenda.filter(ref => ref.status !== 'Completed').length;
-        const totalProposals = trackReferenda.length;
-        const delegations = 0; // This would come from an indexer in production
-        const averageTurnout = trackReferenda.reduce((acc, ref) => {
-          return acc + (parseFloat(ref.tally.support) || 0);
-        }, 0) / (trackReferenda.length || 1);
-        
-        return {
-          id: trackId,
-          name: `Track ${trackId}`,
-          description: this.getTrackDescription(trackId),
-          stats: {
-            activeProposals,
-            totalProposals,
-            delegations,
-            averageTurnout: parseFloat((averageTurnout * 100).toFixed(1))
-          }
-        };
-      });
+      const tracks = rawTracks as TrackJSON[];
+
+      return tracks.map((track, id) => ({
+        id,
+        name: String(track.name),
+        description: String(track.description),
+        minDeposit: formatBalance(track.minDeposit, { decimals: 10 }),
+        decisionPeriod: Number(track.decisionPeriod),
+        preparePeriod: Number(track.preparePeriod),
+        decidingPeriod: Number(track.decidingPeriod),
+        confirmPeriod: Number(track.confirmPeriod),
+        minApproval: Number(track.minApproval),
+        minSupport: Number(track.minSupport)
+      }));
     } catch (error) {
-      throw handleError(error);
+      throw new PolkadotHubError(
+        'Failed to fetch tracks',
+        ErrorCodes.DATA.NOT_FOUND,
+        'Could not load governance tracks. Please try again.'
+      );
     }
   }
 
   async getDelegations(address: string): Promise<DelegationInfo[]> {
-    if (!address) {
-      throw new PolkadotHubError(
-        'Invalid address',
-        ErrorCodes.VALIDATION.INVALID_ADDRESS,
-        'The provided address is invalid.'
-      );
-    }
-
     try {
       const api = await this.getApi();
-      
-      if (!api.query?.convictionVoting?.votingFor) {
+      if (!api.query.convictionVoting?.votingFor) {
         throw new PolkadotHubError(
-          'API not ready',
-          ErrorCodes.NETWORK.API_ERROR,
-          'The conviction voting API is not properly initialized.'
+          'Governance API not available',
+          ErrorCodes.API.ERROR,
+          'The governance API endpoints are not available. Please try again.'
         );
       }
 
       const delegations = await api.query.convictionVoting.votingFor.entries(address);
-      return delegations.map(([key, info]) => {
-        const trackId = (key.args[1] as unknown as BN).toNumber();
-        const votingInfo = info as Codec;
+      return delegations.map(([key, value]: [{ args: AnyTuple }, Codec]) => {
+        const trackId = (key.args[1] as unknown as { toNumber(): number }).toNumber();
+        const rawInfo = value.toJSON() as unknown;
 
-        if (!(votingInfo as any).isDelegating) {
-          throw new PolkadotHubError(
-            'Invalid delegation state',
-            ErrorCodes.VALIDATION.INVALID_STATE,
-            'The voting state is not a delegation.'
-          );
+        if (!rawInfo || typeof rawInfo !== 'object') {
+          return null;
         }
 
-        const delegationInfo = (votingInfo as any).asDelegating;
-        
-        return {
-          target: delegationInfo.target.toString(),
-          amount: delegationInfo.balance.toString(),
-          conviction: delegationInfo.conviction.toNumber(),
-          trackId,
-          delegatedAt: new Date().toISOString() // In production, you'd get this from chain events
-        };
-      });
+        const info = rawInfo as DelegationJSON;
+
+        if (info.isDelegating && info.asDelegating) {
+          const { target, balance, conviction, delegatedAt } = info.asDelegating;
+          return {
+            trackId,
+            target: String(target),
+            amount: formatBalance(balance, { decimals: 10 }),
+            conviction: Number(conviction),
+            delegatedAt: Number(delegatedAt)
+          };
+        }
+
+        return null;
+      }).filter((delegation): delegation is DelegationInfo => delegation !== null);
     } catch (error) {
-      throw handleError(error);
+      throw new PolkadotHubError(
+        'Failed to fetch delegations',
+        ErrorCodes.DATA.NOT_FOUND,
+        'Could not load delegation information. Please try again.'
+      );
     }
   }
 
-  async getDelegationHistory(address: string): Promise<DelegationInfo[]> {
-    if (!address) {
-      throw new PolkadotHubError(
-        'Invalid address',
-        ErrorCodes.VALIDATION.INVALID_ADDRESS,
-        'The provided address is invalid.'
-      );
-    }
-
-    // In a production app, you'd typically get this from an indexer or chain events
-    return this.getDelegations(address);
-  }
-
-  async castVote(referendumIndex: number, vote: 'aye' | 'nay', amount: string) {
-    if (referendumIndex < 0) {
-      throw new PolkadotHubError(
-        'Invalid referendum index',
-        ErrorCodes.VALIDATION.INVALID_INDEX,
-        'The referendum index must be a positive number.'
-      );
-    }
-
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-      throw new PolkadotHubError(
-        'Invalid amount',
-        ErrorCodes.VALIDATION.INVALID_AMOUNT,
-        'The voting amount must be a positive number.'
-      );
-    }
-
+  async getDelegationHistory(_address: string): Promise<DelegationInfo[]> {
     try {
       const api = await this.getApi();
-      
-      if (!api.tx?.convictionVoting?.vote) {
+      if (!api.query.convictionVoting?.votingFor) {
         throw new PolkadotHubError(
-          'API not ready',
-          ErrorCodes.NETWORK.API_ERROR,
-          'The conviction voting API is not properly initialized.'
+          'Governance API not available',
+          ErrorCodes.API.ERROR,
+          'The governance API endpoints are not available. Please try again.'
         );
       }
 
-      await securityLogger.logEvent({
-        type: SecurityEventType.API_ERROR,
-        timestamp: new Date().toISOString(),
-        details: {
-          event: 'CAST_VOTE',
-          referendumIndex,
-          vote,
-          amount
-        }
-      });
-
-      const tx = api.tx.convictionVoting.vote(referendumIndex, {
-        Standard: { vote: vote === 'aye', balance: amount }
-      });
-      
-      return tx;
+      // For now, we'll return an empty array as the history feature
+      // requires additional chain indexing or a separate service to track historical data
+      return [];
     } catch (error) {
-      throw handleError(error);
+      throw new PolkadotHubError(
+        'Failed to fetch delegation history',
+        ErrorCodes.DATA.NOT_FOUND,
+        'Could not load delegation history. Please try again.'
+      );
     }
   }
 
-  async delegateVotes(trackId: number, target: string, amount: string, conviction: number) {
-    if (trackId < 0) {
-      throw new PolkadotHubError(
-        'Invalid track ID',
-        ErrorCodes.VALIDATION.INVALID_TRACK,
-        'The track ID must be a positive number.'
-      );
-    }
-
-    if (!target) {
-      throw new PolkadotHubError(
-        'Invalid target',
-        ErrorCodes.VALIDATION.INVALID_TARGET,
-        'The delegation target address is invalid.'
-      );
-    }
-
-    if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-      throw new PolkadotHubError(
-        'Invalid amount',
-        ErrorCodes.VALIDATION.INVALID_AMOUNT,
-        'The delegation amount must be a positive number.'
-      );
-    }
-
-    if (conviction < 0 || conviction > 6) {
-      throw new PolkadotHubError(
-        'Invalid conviction',
-        ErrorCodes.VALIDATION.INVALID_CONVICTION,
-        'The conviction must be between 0 and 6.'
-      );
-    }
-
+  async vote(
+    referendumIndex: number,
+    vote: 'aye' | 'nay',
+    amount: string,
+    account: AddressOrPair
+  ): Promise<void> {
     try {
       const api = await this.getApi();
-      
-      if (!api.tx?.convictionVoting?.delegate) {
+      if (!api.tx.referenda?.vote) {
         throw new PolkadotHubError(
-          'API not ready',
-          ErrorCodes.NETWORK.API_ERROR,
-          'The conviction voting API is not properly initialized.'
+          'Governance API not available',
+          ErrorCodes.API.ERROR,
+          'The governance API endpoints are not available. Please try again.'
         );
       }
 
-      await securityLogger.logEvent({
-        type: SecurityEventType.API_ERROR,
-        timestamp: new Date().toISOString(),
-        details: {
-          event: 'DELEGATE_VOTES',
-          trackId,
-          target,
-          amount,
-          conviction
+      const tx = api.tx.referenda.vote(referendumIndex, {
+        Standard: {
+          vote: vote === 'aye' ? { Aye: null } : { Nay: null },
+          balance: amount
         }
       });
+
+      await new Promise<void>((resolve, reject) => {
+        tx.signAndSend(account, (result: ISubmittableResult) => {
+          if (result.status.isInBlock || result.status.isFinalized) {
+            resolve();
+          } else if (result.status.isInvalid) {
+            reject(new Error('Invalid transaction'));
+          }
+        }).catch(reject);
+      });
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to submit vote',
+        ErrorCodes.API.ERROR,
+        'Could not submit your vote. Please try again.'
+      );
+    }
+  }
+
+  async delegate(
+    trackId: number,
+    target: string,
+    amount: string,
+    conviction: number,
+    account: AddressOrPair
+  ): Promise<void> {
+    try {
+      const api = await this.getApi();
+      if (!api.tx.convictionVoting?.delegate) {
+        throw new PolkadotHubError(
+          'Governance API not available',
+          ErrorCodes.API.ERROR,
+          'The governance API endpoints are not available. Please try again.'
+        );
+      }
 
       const tx = api.tx.convictionVoting.delegate(
         trackId,
@@ -472,74 +365,54 @@ class GovernanceService {
         conviction,
         amount
       );
-      
-      return tx;
+
+      await new Promise<void>((resolve, reject) => {
+        tx.signAndSend(account, (result: ISubmittableResult) => {
+          if (result.status.isInBlock || result.status.isFinalized) {
+            resolve();
+          } else if (result.status.isInvalid) {
+            reject(new Error('Invalid transaction'));
+          }
+        }).catch(reject);
+      });
     } catch (error) {
-      throw handleError(error);
+      throw new PolkadotHubError(
+        'Failed to delegate votes',
+        ErrorCodes.API.ERROR,
+        'Could not delegate your voting power. Please try again.'
+      );
     }
   }
 
-  async undelegateVotes(trackId: number) {
-    if (trackId < 0) {
-      throw new PolkadotHubError(
-        'Invalid track ID',
-        ErrorCodes.VALIDATION.INVALID_TRACK,
-        'The track ID must be a positive number.'
-      );
-    }
-
+  async undelegate(trackId: number, account: AddressOrPair): Promise<void> {
     try {
       const api = await this.getApi();
-      
-      if (!api.tx?.convictionVoting?.undelegate) {
+      if (!api.tx.convictionVoting?.undelegate) {
         throw new PolkadotHubError(
-          'API not ready',
-          ErrorCodes.NETWORK.API_ERROR,
-          'The conviction voting API is not properly initialized.'
+          'Governance API not available',
+          ErrorCodes.API.ERROR,
+          'The governance API endpoints are not available. Please try again.'
         );
       }
 
-      await securityLogger.logEvent({
-        type: SecurityEventType.API_ERROR,
-        timestamp: new Date().toISOString(),
-        details: {
-          event: 'UNDELEGATE_VOTES',
-          trackId
-        }
-      });
-
       const tx = api.tx.convictionVoting.undelegate(trackId);
-      return tx;
+
+      await new Promise<void>((resolve, reject) => {
+        tx.signAndSend(account, (result: ISubmittableResult) => {
+          if (result.status.isInBlock || result.status.isFinalized) {
+            resolve();
+          } else if (result.status.isInvalid) {
+            reject(new Error('Invalid transaction'));
+          }
+        }).catch(reject);
+      });
     } catch (error) {
-      throw handleError(error);
+      throw new PolkadotHubError(
+        'Failed to undelegate votes',
+        ErrorCodes.API.ERROR,
+        'Could not undelegate your voting power. Please try again.'
+      );
     }
-  }
-
-  private getReferendumStatus(info: any): Referendum['status'] {
-    if (info.isOngoing) {
-      const ongoing = info.asOngoing;
-      if (ongoing.deciding.isSome) {
-        return 'Deciding';
-      } else if (ongoing.confirming.isSome) {
-        return 'Confirming';
-      }
-      return 'Preparing';
-    } else if (info.isApproved || info.isRejected || info.isCancelled || info.isTimedOut) {
-      return 'Completed';
-    }
-    return 'Preparing';
-  }
-
-  private getTrackDescription(trackId: number): string {
-    const descriptions: Record<number, string> = {
-      0: 'Root track for fundamental changes',
-      1: 'Whitelisted caller track',
-      2: 'General governance track',
-      3: 'Council governance track',
-      4: 'Technical track',
-      // Add more track descriptions as needed
-    };
-    return descriptions[trackId] || 'Governance track';
   }
 }
 

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { projectStatsService } from '@/services/projectStats';
 import { PolkadotHubError } from '@/utils/errorHandling';
+import { ErrorCodes } from '@/utils/errorHandling';
 
 interface UseProjectStatsResult {
   stats: {
@@ -24,6 +25,15 @@ export function useProjectStats(projectId: string, chainId?: string): UseProject
   const [error, setError] = useState<PolkadotHubError | null>(null);
 
   const fetchStats = async () => {
+    if (!projectId || !chainId) {
+      setError(new PolkadotHubError(
+        'Missing required parameters',
+        ErrorCodes.VALIDATION.INVALID_PARAMETER,
+        'Project ID and Chain ID are required'
+      ));
+      return;
+    }
+
     try {
       setIsLoading(true);
       setError(null);
@@ -34,9 +44,9 @@ export function useProjectStats(projectId: string, chainId?: string): UseProject
         err instanceof PolkadotHubError
           ? err
           : new PolkadotHubError(
-              'Failed to fetch project statistics',
-              'PROJECT_STATS_ERROR',
-              err instanceof Error ? err.message : undefined
+              'Failed to fetch project stats',
+              ErrorCodes.DATA.NOT_FOUND,
+              err instanceof Error ? err.message : 'Unknown error occurred'
             )
       );
     } finally {

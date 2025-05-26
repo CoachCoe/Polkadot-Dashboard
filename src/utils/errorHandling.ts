@@ -14,7 +14,9 @@ export const ErrorCodes = {
     EXTENSION_NOT_AVAILABLE: 'WALLET_EXTENSION_NOT_AVAILABLE' as const,
     STATE_ERROR: 'WALLET_STATE_ERROR' as const,
     ACCOUNT_NOT_FOUND: 'WALLET_ACCOUNT_NOT_FOUND' as const,
-    SIGNATURE_FAILED: 'WALLET_SIGNATURE_FAILED' as const
+    SIGNATURE_FAILED: 'WALLET_SIGNATURE_FAILED' as const,
+    REJECTED: 'WALLET_REJECTED' as const,
+    EXTENSION_NOT_FOUND: 'WALLET_EXTENSION_NOT_FOUND' as const
   },
 
   // Environment errors
@@ -45,8 +47,8 @@ export const ErrorCodes = {
   // Network errors
   NETWORK: {
     ERROR: 'NETWORK_ERROR' as const,
-    API_ERROR: 'API_ERROR' as const,
-    RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED' as const
+    CONNECTION_ERROR: 'NETWORK_CONNECTION_ERROR' as const,
+    TIMEOUT: 'NETWORK_TIMEOUT' as const
   },
 
   // Data errors
@@ -58,7 +60,9 @@ export const ErrorCodes = {
     PROJECT_FILTER_ERROR: 'PROJECT_FILTER_ERROR' as const,
     ECOSYSTEM_LOAD_ERROR: 'ECOSYSTEM_LOAD_ERROR' as const,
     PROJECT_FETCH_ERROR: 'PROJECT_FETCH_ERROR' as const,
-    STAKING_ERROR: 'STAKING_ERROR' as const
+    STAKING_ERROR: 'STAKING_ERROR' as const,
+    INVALID_FORMAT: 'INVALID_FORMAT' as const,
+    STALE: 'DATA_STALE' as const
   },
 
   // Validation errors
@@ -91,7 +95,8 @@ export const ErrorCodes = {
     CHALLENGE_NOT_FOUND: 'AUTH_CHALLENGE_NOT_FOUND' as const,
     CHALLENGE_EXPIRED: 'AUTH_CHALLENGE_EXPIRED' as const,
     VERIFICATION_FAILED: 'AUTH_VERIFICATION_FAILED' as const,
-    SESSION_CREATION_FAILED: 'AUTH_SESSION_CREATION_FAILED' as const
+    SESSION_CREATION_FAILED: 'AUTH_SESSION_CREATION_FAILED' as const,
+    NOT_AUTHENTICATED: 'NOT_AUTHENTICATED' as const
   },
 
   // Success messages
@@ -109,6 +114,13 @@ export const ErrorCodes = {
     NOT_SUPPORTED: 'NOT_SUPPORTED' as const,
     NOT_AUTHORIZED: 'NOT_AUTHORIZED' as const,
     NOT_FOUND: 'NOT_FOUND' as const
+  },
+
+  // API errors
+  API: {
+    ERROR: 'API_ERROR' as const,
+    RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED' as const,
+    INVALID_RESPONSE: 'INVALID_RESPONSE' as const
   }
 } as const;
 
@@ -138,6 +150,8 @@ const SAFE_ERROR_MESSAGES: Record<ErrorCode, string> = {
   'WALLET_STATE_ERROR': 'Failed to update wallet state',
   'WALLET_ACCOUNT_NOT_FOUND': 'No account found in wallet',
   'WALLET_SIGNATURE_FAILED': 'Failed to sign message',
+  'WALLET_REJECTED': 'Transaction rejected by user',
+  'WALLET_EXTENSION_NOT_FOUND': 'Wallet extension not found',
   
   // Environment errors
   'ENVIRONMENT_ERROR': 'Environment error',
@@ -160,8 +174,8 @@ const SAFE_ERROR_MESSAGES: Record<ErrorCode, string> = {
 
   // Network errors
   'NETWORK_ERROR': 'Network connection failed',
-  'API_ERROR': 'API request failed',
-  'RATE_LIMIT_EXCEEDED': 'Too many requests',
+  'NETWORK_CONNECTION_ERROR': 'Network connection error',
+  'NETWORK_TIMEOUT': 'Network timeout',
 
   // Data errors
   'INVALID_DATA': 'Invalid data received',
@@ -172,6 +186,8 @@ const SAFE_ERROR_MESSAGES: Record<ErrorCode, string> = {
   'ECOSYSTEM_LOAD_ERROR': 'Failed to load ecosystem data',
   'PROJECT_FETCH_ERROR': 'Failed to fetch project data',
   'STAKING_ERROR': 'Failed to load staking information',
+  'INVALID_FORMAT': 'Invalid data format',
+  'DATA_STALE': 'Data is stale',
 
   // Validation errors
   'INVALID_ADDRESS': 'Invalid address format',
@@ -213,7 +229,13 @@ const SAFE_ERROR_MESSAGES: Record<ErrorCode, string> = {
   'AUTH_CHALLENGE_NOT_FOUND': 'Authentication challenge not found',
   'AUTH_CHALLENGE_EXPIRED': 'Authentication challenge has expired',
   'AUTH_VERIFICATION_FAILED': 'Failed to verify authentication',
-  'AUTH_SESSION_CREATION_FAILED': 'Failed to create session'
+  'AUTH_SESSION_CREATION_FAILED': 'Failed to create session',
+  'NOT_AUTHENTICATED': 'Not authenticated',
+
+  // API errors
+  'API_ERROR': 'API request failed',
+  'RATE_LIMIT_EXCEEDED': 'Too many requests',
+  'INVALID_RESPONSE': 'Invalid API response'
 };
 
 export class PolkadotHubError extends Error {

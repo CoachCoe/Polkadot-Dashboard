@@ -1,91 +1,103 @@
 import React from 'react';
-import { DelegationInfo as DelegationInfoType, Track } from '@/services/governance';
+import { Track } from '@/services/governance';
+import { Card } from '@/components/ui/Card';
+
+interface DelegationInfoType {
+  trackId: number;
+  target: string;
+  amount: string;
+  conviction: number;
+  delegatedAt: number;
+}
 
 interface DelegationInfoProps {
+  address: string;
   delegations: DelegationInfoType[];
   delegationHistory: DelegationInfoType[];
   tracks: Track[];
-  onUndelegate: (trackId: number) => Promise<void>;
   isLoading: boolean;
+  onUndelegate?: (trackId: number) => Promise<void>;
 }
 
 export function DelegationInfo({
+  address,
   delegations,
   delegationHistory,
   tracks,
-  onUndelegate,
-  isLoading
+  isLoading,
+  onUndelegate
 }: DelegationInfoProps) {
   const getTrackName = (trackId: number) => {
-    return tracks.find(t => t.id === trackId)?.name || `Track ${trackId}`;
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleDateString(undefined, {
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
-    });
+    const track = tracks.find(t => t.id === trackId);
+    return track ? track.name : `Track ${trackId}`;
   };
 
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-4">
-        <div className="h-4 bg-gray-200 rounded w-1/4"></div>
-        <div className="h-32 bg-gray-200 rounded"></div>
+        {[1, 2].map((i) => (
+          <div key={i} className="h-32 bg-gray-200 rounded"></div>
+        ))}
       </div>
+    );
+  }
+
+  if (delegations.length === 0 && delegationHistory.length === 0) {
+    return (
+      <Card className="p-6 text-center">
+        <p className="text-gray-500">No delegations found for {address}</p>
+      </Card>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Current Delegations</h3>
-        {delegations.length === 0 ? (
-          <p className="text-gray-500">No active delegations</p>
-        ) : (
-          <div className="grid gap-4">
+      {delegations.length > 0 && (
+        <Card className="overflow-hidden">
+          <div className="px-6 py-4 bg-gray-50 border-b">
+            <h3 className="text-lg font-semibold text-gray-900">Active Delegations</h3>
+          </div>
+          <div className="divide-y">
             {delegations.map((delegation, index) => (
-              <div
-                key={`${delegation.target}-${index}`}
-                className="bg-white rounded-lg shadow-sm p-4 border border-gray-100"
-              >
+              <div key={`${delegation.target}-${index}`} className="p-6">
                 <div className="flex justify-between items-start">
                   <div>
-                    <p className="font-medium">Track: {getTrackName(delegation.trackId)}</p>
-                    <p className="text-sm text-gray-600 mt-1">
+                    <p className="font-medium text-gray-900">
+                      {getTrackName(delegation.trackId)}
+                    </p>
+                    <p className="text-sm text-gray-500 mt-1">
                       Delegated to: {delegation.target}
                     </p>
-                    <div className="mt-2 space-y-1">
-                      <p className="text-sm">Amount: {delegation.amount} DOT</p>
-                      <p className="text-sm">
-                        Conviction: {delegation.conviction}x voting weight
-                      </p>
-                    </div>
+                    <p className="text-sm text-gray-500">
+                      Amount: {delegation.amount}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Conviction: {delegation.conviction}x
+                    </p>
                   </div>
-                  <button
-                    onClick={() => onUndelegate(delegation.trackId)}
-                    className="text-red-600 hover:text-red-700 text-sm font-medium"
-                    disabled={isLoading}
-                  >
-                    Undelegate
-                  </button>
+                  {onUndelegate && (
+                    <button
+                      onClick={() => onUndelegate(delegation.trackId)}
+                      className="text-red-600 hover:text-red-700 text-sm font-medium"
+                      disabled={isLoading}
+                    >
+                      Undelegate
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
           </div>
-        )}
-      </div>
+        </Card>
+      )}
 
-      <div>
-        <h3 className="text-lg font-semibold mb-4">Delegation History</h3>
-        {delegationHistory.length === 0 ? (
-          <p className="text-gray-500">No delegation history</p>
-        ) : (
+      {delegationHistory.length > 0 && (
+        <Card className="overflow-hidden">
+          <div className="px-6 py-4 bg-gray-50 border-b">
+            <h3 className="text-lg font-semibold text-gray-900">Delegation History</h3>
+          </div>
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
+            <table className="min-w-full divide-y">
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -95,7 +107,7 @@ export function DelegationInfo({
                     Track
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Delegate
+                    Target
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Amount
@@ -105,22 +117,22 @@ export function DelegationInfo({
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="bg-white divide-y">
                 {delegationHistory.map((history, index) => (
                   <tr key={`${history.target}-${index}`}>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {formatDate(history.delegatedAt)}
+                      {new Date(history.delegatedAt * 1000).toLocaleString()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {getTrackName(history.trackId)}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {history.target}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                      {history.amount} DOT
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                      {history.amount}
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                       {history.conviction}x
                     </td>
                   </tr>
@@ -128,8 +140,8 @@ export function DelegationInfo({
               </tbody>
             </table>
           </div>
-        )}
-      </div>
+        </Card>
+      )}
     </div>
   );
 } 

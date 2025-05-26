@@ -1,262 +1,179 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import { DashboardLayout } from '@/components/layouts/DashboardLayout';
-import { useGovernance } from '@/hooks/useGovernance';
+import React, { useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
-import { DelegationPanel } from '@/components/governance/DelegationPanel';
-import { DelegationInfo } from '@/components/governance/DelegationInfo';
+import { Track, Referendum } from '@/services/governance';
+import { TrackList } from '@/components/governance/TrackList';
 import { TrackInfo } from '@/components/governance/TrackInfo';
-import { GovernanceStats } from '@/components/governance/GovernanceStats';
-import { GovernanceCharts } from '@/components/governance/GovernanceCharts';
-import { ReferendaFilters, type StatusFilter, type SortOption } from '@/components/governance/ReferendaFilters';
+import { ReferendumList } from '@/components/governance/ReferendumList';
+import { DelegationInfo } from '@/components/governance/DelegationInfo';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
-import { PolkadotHubError } from '@/utils/errorHandling';
-import type { Referendum, Track, DelegationInfo as DelegationInfoType } from '@/services/governance';
-import { ReferendaList } from '@/components/governance/ReferendaList';
+import { Button } from '@/components/ui/Button';
+import { ArrowPathIcon } from '@heroicons/react/24/outline';
 
 export default function GovernancePage() {
   const { selectedAccount } = useWalletStore();
-  const {
-    referenda,
-    tracks,
-    delegations,
-    delegationHistory,
-    isLoading,
-    error,
-    vote,
-    delegate,
-    undelegate,
-    refresh
-  }: {
-    referenda: Referendum[];
-    tracks: Track[];
-    delegations: DelegationInfoType[];
-    delegationHistory: DelegationInfoType[];
-    isLoading: boolean;
-    error: string | null;
-    vote: (referendumIndex: number, vote: 'aye' | 'nay', amount: string) => Promise<void>;
-    delegate: (trackId: number, target: string, amount: string, conviction: number) => Promise<void>;
-    undelegate: (trackId: number) => Promise<void>;
-    refresh: () => Promise<void>;
-  } = useGovernance();
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [referenda, setReferenda] = useState<Referendum[]>([]);
+  const [selectedTrackId, setSelectedTrackId] = useState<number>();
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
 
-  const [selectedReferendum, setSelectedReferendum] = useState<number | null>(null);
-  const [selectedTrackId, setSelectedTrackId] = useState<number>(0);
-  const [voteAmount, setVoteAmount] = useState('');
-  const [isDelegating, setIsDelegating] = useState(false);
-  const [errorState, setErrorState] = useState<PolkadotHubError | null>(null);
-
-  // Filtering and sorting state
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [sortBy, setSortBy] = useState<SortOption>('newest');
-
-  const filteredReferenda = useMemo(() => {
-    let filtered = [...referenda];
-
-    // Apply track filter
-    if (selectedTrackId !== undefined) {
-      filtered = filtered.filter(ref => ref.track === selectedTrackId.toString());
+  useEffect(() => {
+    if (selectedAccount) {
+      void loadData();
     }
+  }, [selectedAccount]);
 
-    // Apply status filter
-    if (statusFilter !== 'all') {
-      filtered = filtered.filter(ref => 
-        statusFilter === 'active' 
-          ? ref.status !== 'Completed'
-          : ref.status === 'Completed'
-      );
-    }
+  const loadData = async () => {
+    if (!selectedAccount) return;
 
-    // Apply sorting
-    filtered.sort((a, b) => {
-      switch (sortBy) {
-        case 'oldest':
-          return parseInt(a.submittedAt) - parseInt(b.submittedAt);
-        case 'most-votes':
-          const aVotes = parseFloat(a.tally.ayes) + parseFloat(a.tally.nays);
-          const bVotes = parseFloat(b.tally.ayes) + parseFloat(b.tally.nays);
-          return bVotes - aVotes;
-        case 'highest-turnout':
-          return parseFloat(b.tally.support) - parseFloat(a.tally.support);
-        default: // newest
-          return parseInt(b.submittedAt) - parseInt(a.submittedAt);
-      }
-    });
+    setIsLoading(true);
+    setError(null);
 
-    return filtered;
-  }, [referenda, selectedTrackId, statusFilter, sortBy]);
-
-  if (!selectedAccount) {
-    return (
-      <DashboardLayout>
-        <div className="px-6">
-          <ErrorDisplay 
-            error={new PolkadotHubError(
-              'Please connect your wallet to participate in governance.',
-              'WALLET_NOT_FOUND'
-            )}
-          />
-        </div>
-      </DashboardLayout>
-    );
-  }
-
-  const handleVote = async (referendumIndex: number, voteType: 'aye' | 'nay') => {
     try {
-      await vote(referendumIndex, voteType, voteAmount);
-      setSelectedReferendum(null);
-      setVoteAmount('');
-      setErrorState(new PolkadotHubError(
-        'Vote submitted successfully',
-        'VOTE_SUCCESS',
-        'Your vote has been successfully recorded'
-      ));
-    } catch (err) {
-      console.error('Failed to vote:', err);
-      setErrorState(new PolkadotHubError(
-        'Failed to submit vote',
-        'TRANSACTION_FAILED',
-        err instanceof Error ? err.message : 'Unknown error occurred'
-      ));
-    }
-  };
+      // Simulated data loading for now
+      // In a real app, this would come from the API
+      setTracks([
+        {
+          id: 0,
+          name: 'Root',
+          description: 'Root track for fundamental changes',
+          minDeposit: '100 DOT',
+          decisionPeriod: 100800,
+          preparePeriod: 50400,
+          decidingPeriod: 100800,
+          confirmPeriod: 25200,
+          minApproval: 60,
+          minSupport: 50
+        },
+        {
+          id: 1,
+          name: 'Whitelisted Caller',
+          description: 'Track for whitelisted callers',
+          minDeposit: '10 DOT',
+          decisionPeriod: 50400,
+          preparePeriod: 25200,
+          decidingPeriod: 50400,
+          confirmPeriod: 12600,
+          minApproval: 55,
+          minSupport: 45
+        }
+      ]);
 
-  const handleDelegate = async (trackId: number, target: string, amount: string, conviction: number) => {
-    try {
-      setIsDelegating(true);
-      await delegate(trackId, target, amount, conviction);
-      setErrorState(new PolkadotHubError(
-        'Delegation successful',
-        'DELEGATE_SUCCESS',
-        'Your delegation has been successfully recorded'
-      ));
+      setReferenda([
+        {
+          index: 0,
+          track: '0',
+          title: 'Example Referendum',
+          description: 'This is an example referendum',
+          proposer: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+          status: 'Deciding',
+          submittedAt: '1677649200',
+          deposit: '100 DOT',
+          tally: {
+            ayes: '1000 DOT',
+            nays: '500 DOT',
+            support: '60%'
+          },
+          timeline: {
+            created: 1677649200,
+            deciding: 1677735600,
+            confirming: null,
+            completed: null
+          }
+        }
+      ]);
     } catch (err) {
-      console.error('Failed to delegate:', err);
-      setErrorState(new PolkadotHubError(
-        'Failed to delegate',
-        'TRANSACTION_FAILED',
-        err instanceof Error ? err.message : 'Unknown error occurred'
-      ));
+      setError(err as Error);
     } finally {
-      setIsDelegating(false);
+      setIsLoading(false);
     }
   };
 
-  const handleUndelegate = async (trackId: number) => {
-    try {
-      await undelegate(trackId);
-      setErrorState(new PolkadotHubError(
-        'Successfully undelegated',
-        'UNDELEGATE_SUCCESS',
-        'Your undelegation has been successfully recorded'
-      ));
-    } catch (err) {
-      console.error('Failed to undelegate:', err);
-      setErrorState(new PolkadotHubError(
-        'Failed to undelegate',
-        'TRANSACTION_FAILED',
-        err instanceof Error ? err.message : 'Unknown error occurred'
-      ));
-    }
-  };
-
-  const handleTrackChange = (trackId: number | undefined) => {
-    setSelectedTrackId(trackId ?? 0);
+  const handleTrackChange = (trackId: number) => {
+    setSelectedTrackId(trackId === selectedTrackId ? undefined : trackId);
   };
 
   const handleRefresh = () => {
-    void refresh();
+    void loadData();
   };
 
-  return (
-    <DashboardLayout>
-      <div className="px-6 space-y-8">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold">Governance</h1>
-          <button
-            onClick={handleRefresh}
-            className="text-pink-600 hover:text-pink-700"
-            disabled={isLoading}
-          >
-            {isLoading ? 'Refreshing...' : 'Refresh'}
-          </button>
+  if (!selectedAccount) {
+    return (
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="text-center">
+          <h1 className="text-3xl font-bold text-gray-900 mb-4">
+            Connect Your Wallet
+          </h1>
+          <p className="text-lg text-gray-600 mb-8">
+            Please connect your wallet to participate in governance.
+          </p>
         </div>
-        
-        {(error || errorState) && (
-          <ErrorDisplay
-            error={errorState || new PolkadotHubError(error || 'An error occurred', 'UNKNOWN_ERROR')}
-            action={error ? { label: 'Try Again', onClick: handleRefresh } : undefined}
-          />
-        )}
+      </div>
+    );
+  }
 
-        <GovernanceStats
-          tracks={tracks}
-          referenda={referenda}
-          isLoading={isLoading}
-        />
+  return (
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+      <div className="flex justify-between items-center mb-8">
+        <h1 className="text-3xl font-bold text-gray-900">Governance</h1>
+        <Button
+          variant="outline"
+          onClick={handleRefresh}
+          disabled={isLoading}
+          className="flex items-center gap-2"
+        >
+          <ArrowPathIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
+          {isLoading ? 'Loading...' : 'Refresh'}
+        </Button>
+      </div>
 
-        <GovernanceCharts
-          tracks={tracks}
-          referenda={referenda}
-          isLoading={isLoading}
-        />
+      {error && (
+        <div className="mb-8">
+          <ErrorDisplay error={error} />
+        </div>
+      )}
 
-        <section>
+      <div className="space-y-8">
+        <div>
           <h2 className="text-2xl font-semibold mb-4">Tracks</h2>
-          <TrackInfo
+          <TrackList
             tracks={tracks}
             onSelectTrack={handleTrackChange}
             selectedTrackId={selectedTrackId}
             isLoading={isLoading}
           />
-        </section>
+        </div>
 
-        <section>
-          <h2 className="text-2xl font-semibold mb-4">Referenda</h2>
-          <div className="flex justify-between items-center mb-4">
-            <p className="text-sm text-gray-500">
-              {filteredReferenda.length} referenda found
-            </p>
+        {selectedTrackId !== undefined && tracks.length > 0 && (
+          <div>
+            <h2 className="text-2xl font-semibold mb-4">Track Details</h2>
+            <TrackInfo
+              track={tracks.find(t => t.id === selectedTrackId)!}
+            />
           </div>
-          <ReferendaFilters
-            tracks={tracks}
-            selectedTrackId={selectedTrackId}
-            selectedStatus={statusFilter}
-            sortBy={sortBy}
-            onTrackChange={handleTrackChange}
-            onStatusChange={setStatusFilter}
-            onSortChange={setSortBy}
-          />
-          <ReferendaList
-            referenda={filteredReferenda}
+        )}
+
+        <div>
+          <h2 className="text-2xl font-semibold mb-4">Active Referenda</h2>
+          <ReferendumList
+            referenda={referenda}
             isLoading={isLoading}
-            selectedReferendum={selectedReferendum}
-            voteAmount={voteAmount}
-            onVoteAmountChange={setVoteAmount}
-            onVote={handleVote}
-            onSelectReferendum={setSelectedReferendum}
           />
-        </section>
+        </div>
 
-        <section>
-          <h2 className="text-2xl font-semibold mb-4">Delegation</h2>
-          <div className="space-y-6">
-            <DelegationPanel
-              onDelegate={handleDelegate}
-              tracks={tracks}
-              isLoading={isDelegating}
-            />
-            <DelegationInfo
-              delegations={delegations}
-              delegationHistory={delegationHistory}
-              tracks={tracks}
-              onUndelegate={handleUndelegate}
-              isLoading={isLoading}
-            />
-          </div>
-        </section>
+        <div>
+          <h2 className="text-2xl font-semibold mb-4">Your Delegations</h2>
+          <DelegationInfo
+            address={selectedAccount.address}
+            isLoading={isLoading}
+            delegations={[]}
+            delegationHistory={[]}
+            tracks={tracks}
+          />
+        </div>
       </div>
-    </DashboardLayout>
+    </div>
   );
 } 

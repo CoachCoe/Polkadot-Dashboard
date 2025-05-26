@@ -112,6 +112,15 @@ export default function ProjectDetailPage() {
             `No project found with ID: ${id}`
           );
         }
+        
+        if (!projectData.chainId) {
+          throw new PolkadotHubError(
+            'Invalid project data',
+            ErrorCodes.DATA.INVALID,
+            'Project chain ID is missing'
+          );
+        }
+        
         setProject(projectData);
 
         // Fetch project stats

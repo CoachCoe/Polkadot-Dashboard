@@ -46,19 +46,18 @@ export default function EcosystemPage() {
 
       const statsPromises = projects.map(async (project) => {
         try {
-          const stats = await projectStatsService.getProjectStats(project.id);
+          if (!project.chainId) {
+            console.warn(`Project ${project.id} is missing chainId`);
+            return project;
+          }
+          const stats = await projectStatsService.getProjectStats(project.id, project.chainId);
           return {
             ...project,
             stats
           };
         } catch (error) {
-          throw error instanceof PolkadotHubError
-            ? error
-            : new PolkadotHubError(
-                `Failed to fetch stats for ${project.id}`,
-                ErrorCodes.DATA.PROJECT_STATS_ERROR,
-                error instanceof Error ? error.message : 'Unknown error occurred'
-              );
+          console.error(`Failed to fetch stats for project ${project.id}:`, error);
+          return project;
         }
       });
 
