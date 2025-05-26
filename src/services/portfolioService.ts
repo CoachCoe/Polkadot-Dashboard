@@ -131,76 +131,104 @@ export class PortfolioService {
       const [accountInfo, stakingInfo, democracyLocks] = await Promise.all([
         api.query.system.account<AccountInfo>(address),
         api.query.staking?.ledger?.(address) || Promise.resolve(null),
-        api.query.democracy?.locks?.(address) || Promise.resolve(api.createType('Vec<DemocracyLock>', []))
+        api.query.democracy?.locks ? 
+          api.query.democracy.locks(address).catch(() => api.createType('Vec<()>', [])) :
+          Promise.resolve(api.createType('Vec<()>', []))
       ]);
 
-      log.debug('Account info received', {
-        free: accountInfo.data.free.toString(),
-        reserved: accountInfo.data.reserved.toString(),
-        frozen: accountInfo.data.miscFrozen.toString()
-      });
-
-      const { free, reserved, miscFrozen: frozen } = accountInfo.data as AccountData;
-      const total = free.add(reserved);
-      const transferable = free.sub(frozen);
-      const locked = frozen;
-
-      let bonded = '0';
-      let unbonding = '0';
-      let redeemable = '0';
-
-      if (stakingInfo && !stakingInfo.isEmpty) {
-        const ledger = (stakingInfo as Option<StakingLedger>).unwrap();
-        bonded = formatBalance(ledger.active, { decimals: 10 });
-        log.debug('Staking info received', { bonded });
-
-        if (ledger.unlocking.length > 0) {
-          const currentBlock = await api.query.system.number<BlockNumber>();
-          const currentBlockNumber = currentBlock.toBn();
-
-          unbonding = formatBalance(
-            ledger.unlocking
-              .filter(chunk => chunk.era.toBn().gt(currentBlockNumber))
-              .reduce((acc: BN, chunk) => acc.add(chunk.value.toBn()), new BN(0)),
-            { decimals: 10 }
-          );
-
-          redeemable = formatBalance(
-            ledger.unlocking
-              .filter(chunk => chunk.era.toBn().lte(currentBlockNumber))
-              .reduce((acc: BN, chunk) => acc.add(chunk.value.toBn()), new BN(0)),
-            { decimals: 10 }
-          );
-
-          log.debug('Unlocking info processed', { unbonding, redeemable });
-        }
+      // Verify account info exists and has required properties
+      if (!accountInfo?.data) {
+        throw new PolkadotHubError(
+          'Invalid account data',
+          ErrorCodes.DATA.NOT_FOUND,
+          'Could not retrieve account information. Please try again.'
+        );
       }
 
-      const democracyLocksVec = democracyLocks as Vec<any>;
-      const democracyLocked = democracyLocksVec.length > 0
-        ? formatBalance(
-            democracyLocksVec
-              .reduce((acc: BN, lock) => acc.add(lock.balance.toBn()), new BN(0)),
-            { decimals: 10 }
-          )
-        : '0';
+      // Safely log account info with null checks
+      log.debug('Account info received', {
+        free: accountInfo.data.free?.toString() || '0',
+        reserved: accountInfo.data.reserved?.toString() || '0',
+        frozen: accountInfo.data.miscFrozen?.toString() || '0'
+      });
 
-      log.debug('Democracy locks processed', { democracyLocked });
+      const { free = api.createType('Balance', 0), 
+              reserved = api.createType('Balance', 0), 
+              miscFrozen: frozen = api.createType('Balance', 0) 
+            } = accountInfo.data as AccountData;
 
-      const balance = {
-        total: formatBalance(total, { decimals: 10 }),
-        transferable: formatBalance(transferable, { decimals: 10 }),
-        locked: formatBalance(locked, { decimals: 10 }),
-        bonded,
-        unbonding,
-        redeemable,
-        democracy: democracyLocked
-      };
+      try {
+        const total = free.add(reserved);
+        const transferable = free.sub(frozen);
+        const locked = frozen;
 
-      log.info('Balance fetch completed successfully');
-      log.performance('getBalance', startTime);
+        let bonded = '0';
+        let unbonding = '0';
+        let redeemable = '0';
 
-      return balance;
+        if (stakingInfo && !stakingInfo.isEmpty) {
+          const ledger = (stakingInfo as Option<StakingLedger>).unwrap();
+          bonded = formatBalance(ledger.active || new BN(0), { decimals: 10 });
+          log.debug('Staking info received', { bonded });
+
+          if (ledger.unlocking?.length > 0) {
+            const currentBlock = await api.query.system.number<BlockNumber>();
+            const currentBlockNumber = currentBlock.toBn();
+
+            unbonding = formatBalance(
+              ledger.unlocking
+                .filter(chunk => chunk?.era?.toBn?.()?.gt?.(currentBlockNumber) ?? false)
+                .reduce((acc: BN, chunk) => acc.add(chunk?.value?.toBn?.() || new BN(0)), new BN(0)),
+              { decimals: 10 }
+            );
+
+            redeemable = formatBalance(
+              ledger.unlocking
+                .filter(chunk => chunk?.era?.toBn?.()?.lte?.(currentBlockNumber) ?? false)
+                .reduce((acc: BN, chunk) => acc.add(chunk?.value?.toBn?.() || new BN(0)), new BN(0)),
+              { decimals: 10 }
+            );
+
+            log.debug('Unlocking info processed', { unbonding, redeemable });
+          }
+        }
+
+        const democracyLocksVec = democracyLocks as Vec<any>;
+        const democracyLocked = democracyLocksVec && democracyLocksVec.length > 0 && democracyLocksVec[0]?.balance
+          ? formatBalance(
+              democracyLocksVec
+                .reduce((acc: BN, lock) => {
+                  const balance = lock?.balance?.toBn?.() || new BN(0);
+                  return acc.add(balance);
+                }, new BN(0)),
+              { decimals: 10 }
+            )
+          : '0';
+
+        log.debug('Democracy locks processed', { democracyLocked });
+
+        const balance = {
+          total: formatBalance(total, { decimals: 10 }),
+          transferable: formatBalance(transferable, { decimals: 10 }),
+          locked: formatBalance(locked, { decimals: 10 }),
+          bonded,
+          unbonding,
+          redeemable,
+          democracy: democracyLocked
+        };
+
+        log.info('Balance fetch completed successfully');
+        log.performance('getBalance', startTime);
+
+        return balance;
+      } catch (error) {
+        log.error('Error processing balance data', error);
+        throw new PolkadotHubError(
+          'Failed to process balance',
+          ErrorCodes.DATA.PARSE_ERROR,
+          'Error processing account balance data. Please try again.'
+        );
+      }
     } catch (error) {
       log.error('Failed to fetch balance', error);
       throw new PolkadotHubError(

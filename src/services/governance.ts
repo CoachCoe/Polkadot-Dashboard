@@ -15,45 +15,9 @@ const log = {
   debug: (message: string, ...args: any[]) => console.debug(`${LOG_PREFIX} ${message}`, ...args)
 };
 
-interface ReferendumInfoJSON {
-  track: string;
-  proposal: {
-    title?: string;
-    description?: string;
-  };
-  proposer: string;
-  status: {
-    type: string;
-    deciding?: {
-      since: string | number;
-    };
-    confirming?: {
-      since: string | number;
-    };
-    completed?: {
-      at: string | number;
-    };
-  };
-  submittedAt: string | number;
-  deposit: string | number;
-  tally: {
-    ayes: string | number;
-    nays: string | number;
-    support: string | number;
-  };
-}
 
-interface TrackJSON {
-  name: string;
-  description: string;
-  minDeposit: string | number;
-  decisionPeriod: string | number;
-  preparePeriod: string | number;
-  decidingPeriod: string | number;
-  confirmPeriod: string | number;
-  minApproval: string | number;
-  minSupport: string | number;
-}
+
+
 
 interface DelegationJSON {
   isDelegating: boolean;
@@ -107,6 +71,14 @@ export interface Track {
   minApproval: number;
   minSupport: number;
 }
+
+
+
+
+
+
+
+
 
 class GovernanceService {
   private api: ApiPromise | null = null;
@@ -165,40 +137,87 @@ class GovernanceService {
         const index = (key.args[0] as unknown as { toNumber(): number }).toNumber();
         const rawInfo = value.toJSON() as unknown;
         
+        // Debug log to see the actual data structure
+        log.debug(`Raw referendum data for index ${index}:`, rawInfo);
+
         if (!rawInfo || typeof rawInfo !== 'object') {
-          log.error(`Invalid referendum data for index ${index}`);
-          throw new PolkadotHubError(
-            'Invalid referendum data',
-            ErrorCodes.DATA.INVALID,
-            `Failed to parse referendum data for index ${index}`
-          );
+          log.warn(`Skipping invalid referendum data for index ${index}`);
+          return null;
         }
 
-        const info = rawInfo as ReferendumInfoJSON;
-        log.debug(`Processing referendum ${index}`, { title: info.proposal?.title });
+        // Handle different possible referendum status formats
+        let status = 'unknown';
+        let decidingSince = null;
+        let confirmingSince = null;
+        let completedAt = null;
+        let submittedAt = 0;
+        let track = '0';
+        let proposal = null;
+        let proposer = '';
+        let deposit = '0';
+        let tally = { ayes: '0', nays: '0', support: '0' };
+
+        // Check if it's the newer format with ongoing/approved/rejected status
+        if ('ongoing' in rawInfo) {
+          status = 'ongoing';
+          const ongoing = (rawInfo as any).ongoing;
+          track = String(ongoing?.track || 0);
+          proposal = ongoing?.proposal;
+          proposer = String(ongoing?.proposer || '');
+          submittedAt = Number(ongoing?.submitted || 0);
+          deposit = ongoing?.deposit || 0;
+          tally = ongoing?.tally || { ayes: 0, nays: 0, support: 0 };
+          
+          if (ongoing?.deciding) {
+            decidingSince = Number(ongoing.deciding.since || 0);
+          }
+          if (ongoing?.confirming) {
+            confirmingSince = Number(ongoing.confirming.since || 0);
+          }
+        } else if ('approved' in rawInfo) {
+          status = 'approved';
+          const approved = (rawInfo as any).approved;
+          completedAt = Number(approved?.since || 0);
+        } else if ('rejected' in rawInfo) {
+          status = 'rejected';
+          const rejected = (rawInfo as any).rejected;
+          completedAt = Number(rejected?.since || 0);
+        } else if ('cancelled' in rawInfo) {
+          status = 'cancelled';
+          const cancelled = (rawInfo as any).cancelled;
+          completedAt = Number(cancelled?.since || 0);
+        } else if ('timedOut' in rawInfo) {
+          status = 'timedOut';
+          const timedOut = (rawInfo as any).timedOut;
+          completedAt = Number(timedOut?.since || 0);
+        } else if ('killed' in rawInfo) {
+          status = 'killed';
+          const killed = (rawInfo as any).killed;
+          completedAt = Number(killed?.since || 0);
+        }
 
         return {
           index,
-          track: String(info.track),
-          title: info.proposal?.title || `Referendum #${index}`,
-          description: info.proposal?.description || '',
-          proposer: String(info.proposer),
-          status: String(info.status.type),
-          submittedAt: String(info.submittedAt),
-          deposit: formatBalance(info.deposit, { decimals: 10 }),
+          track: String(track),
+          title: proposal?.title || `Referendum #${index}`,
+          description: proposal?.description || '',
+          proposer,
+          status,
+          submittedAt: String(submittedAt),
+          deposit: formatBalance(deposit, { decimals: 10 }),
           tally: {
-            ayes: formatBalance(info.tally.ayes, { decimals: 10 }),
-            nays: formatBalance(info.tally.nays, { decimals: 10 }),
-            support: formatBalance(info.tally.support, { decimals: 10 })
+            ayes: formatBalance(tally.ayes, { decimals: 10 }),
+            nays: formatBalance(tally.nays, { decimals: 10 }),
+            support: formatBalance(tally.support, { decimals: 10 })
           },
           timeline: {
-            created: Number(info.submittedAt),
-            deciding: info.status.deciding?.since ? Number(info.status.deciding.since) : null,
-            confirming: info.status.confirming?.since ? Number(info.status.confirming.since) : null,
-            completed: info.status.completed?.at ? Number(info.status.completed.at) : null
+            created: submittedAt,
+            deciding: decidingSince,
+            confirming: confirmingSince,
+            completed: completedAt
           }
         };
-      });
+      }).filter((ref): ref is Referendum => ref !== null);
 
       return referenda;
     } catch (error) {
@@ -214,40 +233,113 @@ class GovernanceService {
   async getTracks(): Promise<Track[]> {
     try {
       const api = await this.getApi();
-      if (!api.query.referenda?.tracks) {
-        throw new PolkadotHubError(
-          'Governance API not available',
-          ErrorCodes.API.ERROR,
-          'The governance API endpoints are not available. Please try again.'
-        );
-      }
-
-      const tracksData = await api.query.referenda.tracks();
-      const rawTracks = tracksData.toJSON() as unknown;
       
-      if (!rawTracks || !Array.isArray(rawTracks)) {
-        throw new PolkadotHubError(
-          'Invalid tracks data',
-          ErrorCodes.DATA.INVALID,
-          'Failed to parse tracks data'
-        );
+      // Debug log the available API paths
+      log.debug('Available API paths:', {
+        referenda: Object.keys(api.query.referenda || {}),
+        consts: Object.keys(api.consts.referenda || {}),
+        query: Object.keys(api.query || {})
+      });
+
+      // Try different possible paths for tracks
+      let tracks: Track[] = [];
+      let seenTrackIds = new Set<number>();
+
+      // Try convictionVoting.classLocksFor
+      if (api.query.convictionVoting?.classLocksFor) {
+        log.debug('Using convictionVoting.classLocksFor for tracks');
+        const classIds = await api.query.convictionVoting.classLocksFor.entries();
+        tracks = classIds.map(([key]) => {
+          const id = (key.args[0] as any).toNumber?.() || 0;
+          seenTrackIds.add(id);
+          return {
+            id,
+            name: `Track ${id}`,
+            description: '',
+            minDeposit: formatBalance(0, { decimals: 10 }),
+            decisionPeriod: 0,
+            preparePeriod: 0,
+            decidingPeriod: 0,
+            confirmPeriod: 0,
+            minApproval: 0,
+            minSupport: 0
+          };
+        });
+      }
+      // Try referenda.decidingCount
+      else if (api.query.referenda?.decidingCount) {
+        log.debug('Using referenda.decidingCount for tracks');
+        const trackCount = await api.query.referenda.decidingCount.entries();
+        tracks = trackCount.map(([key]) => {
+          const id = (key.args[0] as any).toNumber?.() || 0;
+          if (seenTrackIds.has(id)) return null;
+          seenTrackIds.add(id);
+          return {
+            id,
+            name: `Track ${id}`,
+            description: '',
+            minDeposit: formatBalance(0, { decimals: 10 }),
+            decisionPeriod: 0,
+            preparePeriod: 0,
+            decidingPeriod: 0,
+            confirmPeriod: 0,
+            minApproval: 0,
+            minSupport: 0
+          };
+        }).filter((track): track is Track => track !== null);
+      }
+      // Try fellowship tracks as fallback
+      else if (api.query.fellowshipReferenda?.trackQueue) {
+        log.debug('Using fellowshipReferenda.trackQueue for tracks');
+        const fellowshipTracks = await api.query.fellowshipReferenda.trackQueue.entries();
+        tracks = fellowshipTracks.map(([key]) => {
+          const id = (key.args[0] as any).toNumber?.() || 0;
+          if (seenTrackIds.has(id)) return null;
+          seenTrackIds.add(id);
+          return {
+            id,
+            name: `Fellowship Track ${id}`,
+            description: 'Fellowship Governance Track',
+            minDeposit: formatBalance(0, { decimals: 10 }),
+            decisionPeriod: 0,
+            preparePeriod: 0,
+            decidingPeriod: 0,
+            confirmPeriod: 0,
+            minApproval: 0,
+            minSupport: 0
+          };
+        }).filter((track): track is Track => track !== null);
       }
 
-      const tracks = rawTracks as TrackJSON[];
+      if (tracks.length === 0) {
+        // If no tracks found, create default tracks 0-10
+        log.warn('No tracks found, using default tracks');
+        tracks = Array.from({ length: 11 }, (_, i) => {
+          if (seenTrackIds.has(i)) return null;
+          seenTrackIds.add(i);
+          return {
+            id: i,
+            name: `Track ${i}`,
+            description: 'Default Track',
+            minDeposit: formatBalance(0, { decimals: 10 }),
+            decisionPeriod: 0,
+            preparePeriod: 0,
+            decidingPeriod: 0,
+            confirmPeriod: 0,
+            minApproval: 0,
+            minSupport: 0
+          };
+        }).filter((track): track is Track => track !== null);
+      }
 
-      return tracks.map((track, id) => ({
-        id,
-        name: String(track.name),
-        description: String(track.description),
-        minDeposit: formatBalance(track.minDeposit, { decimals: 10 }),
-        decisionPeriod: Number(track.decisionPeriod),
-        preparePeriod: Number(track.preparePeriod),
-        decidingPeriod: Number(track.decidingPeriod),
-        confirmPeriod: Number(track.confirmPeriod),
-        minApproval: Number(track.minApproval),
-        minSupport: Number(track.minSupport)
-      }));
+      // Sort tracks by ID to ensure consistent ordering
+      tracks.sort((a, b) => a.id - b.id);
+
+      log.info(`Successfully fetched ${tracks.length} tracks`);
+      return tracks;
+
     } catch (error) {
+      log.error('Failed to fetch tracks:', error);
       throw new PolkadotHubError(
         'Failed to fetch tracks',
         ErrorCodes.DATA.NOT_FOUND,

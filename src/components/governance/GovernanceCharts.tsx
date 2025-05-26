@@ -30,36 +30,42 @@ export function GovernanceCharts({
       .reverse();
 
     const votingTrends = {
-      labels: recentReferenda.map(ref => `#${ref.index}`),
+      labels: recentReferenda.map(ref => `Ref #${ref.index}`),
       values: recentReferenda.map(ref => {
         const ayes = parseFloat(ref.tally.ayes) || 0;
         const nays = parseFloat(ref.tally.nays) || 0;
         const total = ayes + nays;
         return total > 0 ? (ayes / total * 100) : 0;
       }),
-      colors: ['#EC4899'] // pink-600
+      colors: recentReferenda.map(() => '#EC4899')
     };
+
+    // Create a map of track IDs to ensure uniqueness
+    const trackMap = new Map(tracks.map(track => [track.id.toString(), track]));
+
+    // Filter out referenda with invalid track IDs
+    const validReferenda = referenda.filter(ref => trackMap.has(ref.track));
 
     // Prepare data for track activity
     const trackActivity = {
-      labels: tracks.map(track => track.name),
-      values: tracks.map(track => {
-        const trackRefs = referenda.filter(ref => ref.track === track.id.toString());
+      labels: Array.from(trackMap.values()).map(track => `${track.name} (${track.id})`),
+      values: Array.from(trackMap.values()).map(track => {
+        const trackRefs = validReferenda.filter(ref => ref.track === track.id.toString());
         return trackRefs.length;
       }),
-      colors: tracks.map(() => '#EC4899')
+      colors: Array.from(trackMap.values()).map(() => '#EC4899')
     };
 
     // Prepare data for turnout rates
     const turnoutRates = {
-      labels: tracks.map(track => track.name),
-      values: tracks.map(track => {
-        const trackRefs = referenda.filter(ref => ref.track === track.id.toString());
+      labels: Array.from(trackMap.values()).map(track => `${track.name} (${track.id})`),
+      values: Array.from(trackMap.values()).map(track => {
+        const trackRefs = validReferenda.filter(ref => ref.track === track.id.toString());
         if (trackRefs.length === 0) return 0;
         const totalSupport = trackRefs.reduce((acc, ref) => acc + (parseFloat(ref.tally.support) || 0), 0);
         return (totalSupport / trackRefs.length) * 100;
       }),
-      colors: ['#EC4899']
+      colors: Array.from(trackMap.values()).map(() => '#EC4899')
     };
 
     return {
@@ -83,21 +89,25 @@ export function GovernanceCharts({
     return (
       <div className="relative h-[200px]">
         <div className="absolute inset-0 flex items-end justify-around">
-          {data.values.map((value, index) => (
-            <div key={index} className="flex flex-col items-center w-full px-2">
-              <div
-                className="w-full bg-pink-600 rounded-t"
-                style={{
-                  height: `${(value / maxValue) * height}px`,
-                  transition: 'height 0.3s ease-in-out'
-                }}
-              />
-              <div className="mt-2 text-xs text-gray-500 truncate w-full text-center">
-                {data.labels[index]}
+          {data.values.map((value, index) => {
+            const label = data.labels[index];
+            const uniqueKey = `${label}-${value.toFixed(3)}-${index}`;
+            return (
+              <div key={uniqueKey} className="flex flex-col items-center w-full px-2">
+                <div
+                  className="w-full bg-pink-600 rounded-t"
+                  style={{
+                    height: `${(value / maxValue) * height}px`,
+                    transition: 'height 0.3s ease-in-out'
+                  }}
+                />
+                <div className="mt-2 text-xs text-gray-500 truncate w-full text-center">
+                  {label}
+                </div>
+                <div className="text-xs font-medium">{value.toFixed(1)}%</div>
               </div>
-              <div className="text-xs font-medium">{value.toFixed(1)}%</div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
     );
@@ -115,7 +125,9 @@ export function GovernanceCharts({
     const maxValue = Math.max(...data.values, 0.1);
     const points = data.values.map((value, index) => ({
       x: data.values.length > 1 ? (index / (data.values.length - 1)) * 100 : 0,
-      y: (value / maxValue) * 100
+      y: (value / maxValue) * 100,
+      label: data.labels[index],
+      value: value.toFixed(3)
     }));
 
     const pathData = points
@@ -133,25 +145,28 @@ export function GovernanceCharts({
             stroke="#EC4899"
             strokeWidth="2"
           />
-          {points.map((point, index) => (
-            <g key={index}>
-              <circle
-                cx={`${point.x}%`}
-                cy={`${100 - point.y}%`}
-                r="4"
-                fill="#EC4899"
-              />
-              <text
-                x={`${point.x}%`}
-                y="100%"
-                textAnchor="middle"
-                className="text-xs"
-                fill="#6B7280"
-              >
-                {data.labels[index]}
-              </text>
-            </g>
-          ))}
+          {points.map((point, index) => {
+            const uniqueKey = `${point.label}-${point.value}-${index}`;
+            return (
+              <g key={uniqueKey}>
+                <circle
+                  cx={`${point.x}%`}
+                  cy={`${100 - point.y}%`}
+                  r="4"
+                  fill="#EC4899"
+                />
+                <text
+                  x={`${point.x}%`}
+                  y="100%"
+                  textAnchor="middle"
+                  className="text-xs"
+                  fill="#6B7280"
+                >
+                  {point.label}
+                </text>
+              </g>
+            );
+          })}
         </svg>
       </div>
     );
@@ -161,7 +176,7 @@ export function GovernanceCharts({
     return (
       <div className="animate-pulse space-y-8">
         {[1, 2, 3].map((i) => (
-          <div key={i} className="space-y-4">
+          <div key={`loading-${i}`} className="space-y-4">
             <div className="h-4 bg-gray-200 rounded w-1/4"></div>
             <div className="h-[200px] bg-gray-200 rounded"></div>
           </div>

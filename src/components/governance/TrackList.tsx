@@ -15,24 +15,43 @@ export function TrackList({
   selectedTrackId,
   isLoading
 }: TrackListProps) {
+  // Ensure unique tracks by ID
+  const uniqueTracks = React.useMemo(() => {
+    const trackMap = new Map<number, Track>();
+    tracks.forEach(track => {
+      if (!trackMap.has(track.id)) {
+        trackMap.set(track.id, track);
+      }
+    });
+    return Array.from(trackMap.values()).sort((a, b) => a.id - b.id);
+  }, [tracks]);
+
   if (isLoading) {
     return (
       <div className="animate-pulse space-y-4">
         <div className="h-4 bg-gray-200 rounded w-1/4"></div>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="h-32 bg-gray-200 rounded"></div>
+          {Array.from({ length: 3 }, (_, index) => (
+            <div key={`loading-skeleton-${index}`} className="h-32 bg-gray-200 rounded"></div>
           ))}
         </div>
       </div>
     );
   }
 
+  if (uniqueTracks.length === 0) {
+    return (
+      <div className="text-center py-8">
+        <p className="text-gray-500">No tracks available</p>
+      </div>
+    );
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {tracks.map((track) => (
+      {uniqueTracks.map((track) => (
         <Card
-          key={track.id}
+          key={`track-${track.id}`}
           className={`
             p-4 border-2 cursor-pointer transition-all
             ${selectedTrackId === track.id

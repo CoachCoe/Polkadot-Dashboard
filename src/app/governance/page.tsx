@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
-import { Track, Referendum } from '@/services/governance';
+import { Track, Referendum, governanceService } from '@/services/governance';
 import { TrackList } from '@/components/governance/TrackList';
 import { ReferendaList } from '@/components/governance/ReferendumList';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
@@ -18,6 +18,7 @@ export default function GovernancePage() {
   const [error, setError] = useState<Error | null>(null);
   const [selectedReferendum, setSelectedReferendum] = useState<number | null>(null);
   const [voteAmount, setVoteAmount] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     if (selectedAccount) {
@@ -32,72 +33,49 @@ export default function GovernancePage() {
     setError(null);
 
     try {
-      // Simulated data loading for now
-      // In a real app, this would come from the API
-      setTracks([
-        {
-          id: 0,
-          name: 'Root',
-          description: 'Root track for fundamental changes',
-          minDeposit: '100 DOT',
-          decisionPeriod: 100800,
-          preparePeriod: 50400,
-          decidingPeriod: 100800,
-          confirmPeriod: 25200,
-          minApproval: 60,
-          minSupport: 50
-        },
-        {
-          id: 1,
-          name: 'Whitelisted Caller',
-          description: 'Track for whitelisted callers',
-          minDeposit: '10 DOT',
-          decisionPeriod: 50400,
-          preparePeriod: 25200,
-          decidingPeriod: 50400,
-          confirmPeriod: 12600,
-          minApproval: 55,
-          minSupport: 45
-        }
+      // Load tracks and referenda in parallel
+      const [tracksData, referendaData] = await Promise.all([
+        governanceService.getTracks(),
+        governanceService.getReferenda()
       ]);
 
-      setReferenda([
-        {
-          index: 0,
-          track: '0',
-          title: 'Example Referendum',
-          description: 'This is an example referendum',
-          proposer: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-          status: 'Deciding',
-          submittedAt: '1677649200',
-          deposit: '100 DOT',
-          tally: {
-            ayes: '1000 DOT',
-            nays: '500 DOT',
-            support: '60%'
-          },
-          timeline: {
-            created: 1677649200,
-            deciding: 1677735600,
-            confirming: null,
-            completed: null
-          }
-        }
-      ]);
+      setTracks(tracksData);
+      setReferenda(referendaData);
     } catch (err) {
+      console.error('Failed to load governance data:', err);
       setError(err as Error);
     } finally {
       setIsLoading(false);
+      setIsRefreshing(false);
     }
   };
 
-  const handleVote = async (_referendumIndex: number, _voteType: 'aye' | 'nay') => {
+  const handleVote = async (referendumIndex: number, voteType: 'aye' | 'nay') => {
+    if (!selectedAccount || !voteAmount) return;
+
     try {
-      // Vote implementation...
+      await governanceService.vote(
+        referendumIndex,
+        voteType,
+        voteAmount,
+        selectedAccount.address
+      );
+      
+      // Refresh data after voting
       await loadData();
+      
+      // Reset vote amount and selected referendum
+      setVoteAmount('');
+      setSelectedReferendum(null);
     } catch (err) {
+      console.error('Failed to submit vote:', err);
       setError(err as Error);
     }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadData();
   };
 
   if (!selectedAccount) {
@@ -117,11 +95,12 @@ export default function GovernancePage() {
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-bold">Governance</h1>
         <Button
-          onClick={() => void loadData()}
+          onClick={handleRefresh}
           className="flex items-center space-x-2"
+          disabled={isRefreshing}
         >
-          <ArrowPathIcon className="h-5 w-5" />
-          <span>Refresh</span>
+          <ArrowPathIcon className={`h-5 w-5 ${isRefreshing ? 'animate-spin' : ''}`} />
+          <span>{isRefreshing ? 'Refreshing...' : 'Refresh'}</span>
         </Button>
       </div>
 
