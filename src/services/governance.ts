@@ -6,6 +6,15 @@ import type { ISubmittableResult } from '@polkadot/types/types';
 import type { AnyTuple, Codec } from '@polkadot/types/types';
 import type { AddressOrPair } from '@polkadot/api/types';
 
+// Add logger
+const LOG_PREFIX = '[GovernanceService]';
+const log = {
+  info: (message: string, ...args: any[]) => console.log(`${LOG_PREFIX} ${message}`, ...args),
+  error: (message: string, error?: any) => console.error(`${LOG_PREFIX} ${message}`, error || ''),
+  warn: (message: string, ...args: any[]) => console.warn(`${LOG_PREFIX} ${message}`, ...args),
+  debug: (message: string, ...args: any[]) => console.debug(`${LOG_PREFIX} ${message}`, ...args)
+};
+
 interface ReferendumInfoJSON {
   track: string;
   proposal: {
@@ -103,7 +112,9 @@ class GovernanceService {
   private api: ApiPromise | null = null;
   private static instance: GovernanceService;
 
-  private constructor() {}
+  private constructor() {
+    log.info('Initializing GovernanceService');
+  }
 
   static getInstance(): GovernanceService {
     if (!GovernanceService.instance) {
@@ -115,9 +126,12 @@ class GovernanceService {
   async getApi(): Promise<ApiPromise> {
     try {
       if (!this.api) {
+        log.info('Connecting to Polkadot API...');
         this.api = await polkadotService.getApi();
+        log.info('Successfully connected to Polkadot API');
       }
       if (!this.api?.isConnected) {
+        log.error('API connection check failed');
         throw new PolkadotHubError(
           'Failed to connect to network',
           ErrorCodes.NETWORK.ERROR,
@@ -126,14 +140,17 @@ class GovernanceService {
       }
       return this.api;
     } catch (error) {
+      log.error('Failed to get API connection', error);
       throw handleError(error);
     }
   }
 
   async getReferenda(): Promise<Referendum[]> {
     try {
+      log.info('Fetching referenda...');
       const api = await this.getApi();
       if (!api.query.referenda?.referendumInfoFor) {
+        log.error('Governance API endpoints not available');
         throw new PolkadotHubError(
           'Governance API not available',
           ErrorCodes.API.ERROR,
@@ -142,11 +159,14 @@ class GovernanceService {
       }
 
       const referendaEntries = await api.query.referenda.referendumInfoFor.entries();
+      log.info(`Found ${referendaEntries.length} referenda`);
+
       const referenda = referendaEntries.map(([key, value]: [{ args: AnyTuple }, Codec]) => {
         const index = (key.args[0] as unknown as { toNumber(): number }).toNumber();
         const rawInfo = value.toJSON() as unknown;
         
         if (!rawInfo || typeof rawInfo !== 'object') {
+          log.error(`Invalid referendum data for index ${index}`);
           throw new PolkadotHubError(
             'Invalid referendum data',
             ErrorCodes.DATA.INVALID,
@@ -155,6 +175,7 @@ class GovernanceService {
         }
 
         const info = rawInfo as ReferendumInfoJSON;
+        log.debug(`Processing referendum ${index}`, { title: info.proposal?.title });
 
         return {
           index,
@@ -181,6 +202,7 @@ class GovernanceService {
 
       return referenda;
     } catch (error) {
+      log.error('Failed to fetch referenda', error);
       throw new PolkadotHubError(
         'Failed to fetch referenda',
         ErrorCodes.DATA.NOT_FOUND,

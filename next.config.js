@@ -15,6 +15,18 @@ const nextConfig = {
         url: require.resolve('url'),
         https: require.resolve('https-browserify'),
         http: require.resolve('stream-http'),
+        timers: require.resolve('timers-browserify'),
+        'timers/promises': false,
+        buffer: require.resolve('buffer/'),
+        util: require.resolve('util/'),
+        assert: require.resolve('assert/'),
+        path: require.resolve('path-browserify'),
+        zlib: require.resolve('browserify-zlib'),
+        'node:crypto': require.resolve('crypto-browserify'),
+        'node:net': false,
+        'node:tls': false,
+        'node:timers/promises': false,
+        'node:url': require.resolve('url'),
       };
     }
     return config;
@@ -34,7 +46,7 @@ const nextConfig = {
           },
           {
             key: 'X-Frame-Options',
-            value: 'SAMEORIGIN'
+            value: 'DENY'
           },
           {
             key: 'X-Content-Type-Options',
@@ -46,17 +58,27 @@ const nextConfig = {
           },
           {
             key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=(), serial=(), midi=(), magnetometer=(), accelerometer=(), gyroscope=()'
+            value: 'accelerometer=(), ambient-light-sensor=(), autoplay=(), battery=(), camera=(), cross-origin-isolated=(), display-capture=(), document-domain=(), encrypted-media=(), execution-while-not-rendered=(), execution-while-out-of-viewport=(), fullscreen=(), geolocation=(), gyroscope=(), keyboard-map=(), magnetometer=(), microphone=(), midi=(), navigation-override=(), payment=(), picture-in-picture=(), publickey-credentials-get=(), screen-wake-lock=(), sync-xhr=(), usb=(), web-share=(), xr-spatial-tracking=(), clipboard-read=(), clipboard-write=(), gamepad=(), speaker-selection=(), conversion-measurement=(), focus-without-user-activation=(), hid=(), idle-detection=(), interest-cohort=(), serial=(), sync-script=(), trust-token-redemption=(), window-placement=(), vertical-scroll=()'
           },
           {
             key: 'Content-Security-Policy',
             value: [
-              "default-src 'self'",
-              "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
-              "style-src 'self' 'unsafe-inline'",
-              "img-src 'self' data: https:",
-              "font-src 'self' data: https:",
-              "connect-src 'self' https://api.coingecko.com https://polkadot.api.subscan.io https://api.llama.fi wss://rpc.polkadot.io"
+              "default-src 'none'",
+              "script-src 'self' 'nonce-{NONCE}' 'strict-dynamic'",
+              "style-src 'self' 'nonce-{NONCE}'",
+              "img-src 'self' data: https: blob:",
+              "font-src 'self' data: https://fonts.gstatic.com",
+              "connect-src 'self' https://api.polkadot.io https://api.coingecko.com wss://rpc.polkadot.io",
+              "frame-ancestors 'none'",
+              "form-action 'self'",
+              "base-uri 'none'",
+              "object-src 'none'",
+              "manifest-src 'self'",
+              "media-src 'none'",
+              "worker-src 'self' blob:",
+              "sandbox allow-forms allow-scripts allow-same-origin allow-popups",
+              "upgrade-insecure-requests",
+              "block-all-mixed-content"
             ].join('; ')
           }
         ]

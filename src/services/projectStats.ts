@@ -1,6 +1,19 @@
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import { formatBalance } from '@polkadot/util';
 
+// Add logger
+const LOG_PREFIX = '[ProjectStatsService]';
+const log = {
+  info: (message: string, ...args: any[]) => console.log(`${LOG_PREFIX} ${message}`, ...args),
+  error: (message: string, error?: any) => console.error(`${LOG_PREFIX} ${message}`, error || ''),
+  warn: (message: string, ...args: any[]) => console.warn(`${LOG_PREFIX} ${message}`, ...args),
+  debug: (message: string, ...args: any[]) => console.debug(`${LOG_PREFIX} ${message}`, ...args),
+  performance: (operation: string, startTime: number) => {
+    const duration = Date.now() - startTime;
+    console.log(`${LOG_PREFIX} Performance - ${operation}: ${duration}ms`);
+  }
+};
+
 export interface ProjectStats {
   tvl: string;
   volume24h: string;
@@ -22,7 +35,9 @@ class ProjectStatsService {
   private lastFetch: Date | null = null;
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
   
-  private constructor() {}
+  private constructor() {
+    log.info('Initializing ProjectStatsService');
+  }
 
   static getInstance(): ProjectStatsService {
     if (!ProjectStatsService.instance) {
@@ -34,25 +49,33 @@ class ProjectStatsService {
   private getCachedData(key: string) {
     const cached = cache.get(key);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+      log.debug(`Cache hit for key: ${key}`);
       return cached.data;
     }
+    log.debug(`Cache miss for key: ${key}`);
     return null;
   }
 
   private setCachedData(key: string, data: any) {
+    log.debug(`Caching data for key: ${key}`);
     cache.set(key, { data, timestamp: Date.now() });
   }
 
   async getStats(): Promise<ProjectStats> {
+    const startTime = Date.now();
+    log.info('Fetching project stats');
+
     if (this.lastStats && this.lastFetch) {
       const now = new Date();
       const timeSinceLastFetch = now.getTime() - this.lastFetch.getTime();
       if (timeSinceLastFetch < this.CACHE_DURATION) {
+        log.info('Returning cached stats');
         return this.lastStats;
       }
     }
 
     try {
+      log.debug('Making API calls to fetch stats');
       const [priceData, chainData] = await Promise.all([
         this.fetchPriceData(),
         this.fetchChainData()
@@ -61,9 +84,9 @@ class ProjectStatsService {
       const stats: ProjectStats = {
         tvl: formatBalance(chainData.totalStaked, { decimals: 10 }),
         volume24h: formatBalance(priceData.volume24h, { decimals: 10 }),
-        transactions24h: 0, // This data is not available in current API responses
-        uniqueUsers24h: 0, // This data is not available in current API responses
-        monthlyTransactions: 0, // This data is not available in current API responses
+        transactions24h: 0,
+        uniqueUsers24h: 0,
+        monthlyTransactions: 0,
         monthlyActiveUsers: chainData.totalAccounts,
         price: priceData.price.toString(),
         marketCap: priceData.marketCap.toString(),
@@ -73,8 +96,12 @@ class ProjectStatsService {
       this.lastStats = stats;
       this.lastFetch = new Date();
 
+      log.info('Stats fetch completed successfully');
+      log.performance('getStats', startTime);
+
       return stats;
     } catch (error) {
+      log.error('Failed to fetch project stats', error);
       throw new PolkadotHubError(
         'Failed to fetch project stats',
         ErrorCodes.NETWORK.ERROR,
@@ -163,12 +190,17 @@ class ProjectStatsService {
   }
 
   async getProjectStats(projectId: string, chainId: string): Promise<ProjectStats> {
+    const startTime = Date.now();
+    log.info(`Fetching stats for project ${projectId} on chain ${chainId}`);
+
     try {
       const cachedData = this.getCachedData(`project_${projectId}`);
       if (cachedData) {
+        log.info('Returning cached project stats');
         return cachedData;
       }
 
+      log.debug('Making API call to fetch project stats');
       const response = await fetch(`https://api.subscan.io/api/v2/scan/project/${projectId}`, {
         method: 'POST',
         headers: {
@@ -179,11 +211,13 @@ class ProjectStatsService {
       });
 
       if (!response.ok) {
+        log.error(`HTTP error! status: ${response.status}`);
         throw new Error(`HTTP error! status: ${response.status}`);
       }
 
       const data = await response.json();
       if (!data.data) {
+        log.error('Invalid response format from Subscan API');
         throw new Error('Invalid response format');
       }
 
@@ -199,8 +233,13 @@ class ProjectStatsService {
       };
 
       this.setCachedData(`project_${projectId}`, stats);
+      
+      log.info('Project stats fetch completed successfully');
+      log.performance('getProjectStats', startTime);
+
       return stats;
     } catch (error) {
+      log.error('Failed to fetch project stats', error);
       throw new PolkadotHubError(
         'Failed to fetch project stats',
         ErrorCodes.NETWORK.ERROR,

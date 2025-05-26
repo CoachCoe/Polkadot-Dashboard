@@ -8,6 +8,19 @@ import type { Vec } from '@polkadot/types';
 import type { BlockNumber } from '@polkadot/types/interfaces/runtime';
 import BN from 'bn.js';
 
+// Add logger
+const LOG_PREFIX = '[PortfolioService]';
+const log = {
+  info: (message: string, ...args: any[]) => console.log(`${LOG_PREFIX} ${message}`, ...args),
+  error: (message: string, error?: any) => console.error(`${LOG_PREFIX} ${message}`, error || ''),
+  warn: (message: string, ...args: any[]) => console.warn(`${LOG_PREFIX} ${message}`, ...args),
+  debug: (message: string, ...args: any[]) => console.debug(`${LOG_PREFIX} ${message}`, ...args),
+  performance: (operation: string, startTime: number) => {
+    const duration = Date.now() - startTime;
+    console.log(`${LOG_PREFIX} Performance - ${operation}: ${duration}ms`);
+  }
+};
+
 export interface PortfolioBalance {
   total: string;
   transferable: string;
@@ -59,7 +72,9 @@ export class PortfolioService {
   private api: ApiPromise | null = null;
   private static instance: PortfolioService;
 
-  private constructor() {}
+  private constructor() {
+    log.info('Initializing PortfolioService');
+  }
 
   static getInstance(): PortfolioService {
     if (!PortfolioService.instance) {
@@ -71,9 +86,12 @@ export class PortfolioService {
   async getApi(): Promise<ApiPromise> {
     try {
       if (!this.api) {
+        log.info('Connecting to Polkadot API...');
         this.api = await polkadotService.getApi();
+        log.info('Successfully connected to Polkadot API');
       }
       if (!this.api?.isConnected) {
+        log.error('API connection check failed');
         throw new PolkadotHubError(
           'Failed to connect to network',
           ErrorCodes.NETWORK.ERROR,
@@ -82,14 +100,19 @@ export class PortfolioService {
       }
       return this.api;
     } catch (error) {
+      log.error('Failed to get API connection', error);
       throw handleError(error);
     }
   }
 
   async getBalance(address: string): Promise<PortfolioBalance> {
+    const startTime = Date.now();
+    log.info(`Fetching balance for address: ${address}`);
+
     try {
       const api = await this.getApi();
       if (!api.query.system?.account) {
+        log.error('Portfolio API endpoints not available');
         throw new PolkadotHubError(
           'Portfolio API not available',
           ErrorCodes.API.ERROR,
@@ -111,6 +134,12 @@ export class PortfolioService {
         api.query.democracy?.locks?.(address) || Promise.resolve(api.createType('Vec<DemocracyLock>', []))
       ]);
 
+      log.debug('Account info received', {
+        free: accountInfo.data.free.toString(),
+        reserved: accountInfo.data.reserved.toString(),
+        frozen: accountInfo.data.miscFrozen.toString()
+      });
+
       const { free, reserved, miscFrozen: frozen } = accountInfo.data as AccountData;
       const total = free.add(reserved);
       const transferable = free.sub(frozen);
@@ -123,6 +152,7 @@ export class PortfolioService {
       if (stakingInfo && !stakingInfo.isEmpty) {
         const ledger = (stakingInfo as Option<StakingLedger>).unwrap();
         bonded = formatBalance(ledger.active, { decimals: 10 });
+        log.debug('Staking info received', { bonded });
 
         if (ledger.unlocking.length > 0) {
           const currentBlock = await api.query.system.number<BlockNumber>();
@@ -141,6 +171,8 @@ export class PortfolioService {
               .reduce((acc: BN, chunk) => acc.add(chunk.value.toBn()), new BN(0)),
             { decimals: 10 }
           );
+
+          log.debug('Unlocking info processed', { unbonding, redeemable });
         }
       }
 
@@ -153,7 +185,9 @@ export class PortfolioService {
           )
         : '0';
 
-      return {
+      log.debug('Democracy locks processed', { democracyLocked });
+
+      const balance = {
         total: formatBalance(total, { decimals: 10 }),
         transferable: formatBalance(transferable, { decimals: 10 }),
         locked: formatBalance(locked, { decimals: 10 }),
@@ -162,7 +196,13 @@ export class PortfolioService {
         redeemable,
         democracy: democracyLocked
       };
+
+      log.info('Balance fetch completed successfully');
+      log.performance('getBalance', startTime);
+
+      return balance;
     } catch (error) {
+      log.error('Failed to fetch balance', error);
       throw new PolkadotHubError(
         'Failed to fetch balance',
         ErrorCodes.DATA.NOT_FOUND,

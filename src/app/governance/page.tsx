@@ -4,9 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
 import { Track, Referendum } from '@/services/governance';
 import { TrackList } from '@/components/governance/TrackList';
-import { TrackInfo } from '@/components/governance/TrackInfo';
-import { ReferendumList } from '@/components/governance/ReferendumList';
-import { DelegationInfo } from '@/components/governance/DelegationInfo';
+import { ReferendaList } from '@/components/governance/ReferendumList';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
 import { Button } from '@/components/ui/Button';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
@@ -18,6 +16,8 @@ export default function GovernancePage() {
   const [selectedTrackId, setSelectedTrackId] = useState<number>();
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<Error | null>(null);
+  const [selectedReferendum, setSelectedReferendum] = useState<number | null>(null);
+  const [voteAmount, setVoteAmount] = useState('');
 
   useEffect(() => {
     if (selectedAccount) {
@@ -91,88 +91,61 @@ export default function GovernancePage() {
     }
   };
 
-  const handleTrackChange = (trackId: number) => {
-    setSelectedTrackId(trackId === selectedTrackId ? undefined : trackId);
-  };
-
-  const handleRefresh = () => {
-    void loadData();
+  const handleVote = async (_referendumIndex: number, _voteType: 'aye' | 'nay') => {
+    try {
+      // Vote implementation...
+      await loadData();
+    } catch (err) {
+      setError(err as Error);
+    }
   };
 
   if (!selectedAccount) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">
-            Connect Your Wallet
-          </h1>
-          <p className="text-lg text-gray-600 mb-8">
-            Please connect your wallet to participate in governance.
-          </p>
-        </div>
+      <div className="text-center py-12">
+        <p className="text-gray-600">Please connect your wallet to view governance data.</p>
       </div>
     );
   }
 
+  if (error) {
+    return <ErrorDisplay error={error} />;
+  }
+
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-      <div className="flex justify-between items-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-900">Governance</h1>
+    <div className="space-y-8">
+      <div className="flex justify-between items-center">
+        <h1 className="text-3xl font-bold">Governance</h1>
         <Button
-          variant="outline"
-          onClick={handleRefresh}
-          disabled={isLoading}
-          className="flex items-center gap-2"
+          onClick={() => void loadData()}
+          className="flex items-center space-x-2"
         >
-          <ArrowPathIcon className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          {isLoading ? 'Loading...' : 'Refresh'}
+          <ArrowPathIcon className="h-5 w-5" />
+          <span>Refresh</span>
         </Button>
       </div>
 
-      {error && (
-        <div className="mb-8">
-          <ErrorDisplay error={error} />
-        </div>
-      )}
+      <div>
+        <h2 className="text-2xl font-semibold mb-4">Active Referenda</h2>
+        <ReferendaList
+          referenda={referenda}
+          isLoading={isLoading}
+          selectedReferendum={selectedReferendum}
+          voteAmount={voteAmount}
+          onVoteAmountChange={setVoteAmount}
+          onVote={handleVote}
+          onSelectReferendum={setSelectedReferendum}
+        />
+      </div>
 
-      <div className="space-y-8">
-        <div>
-          <h2 className="text-2xl font-semibold mb-4">Tracks</h2>
-          <TrackList
-            tracks={tracks}
-            onSelectTrack={handleTrackChange}
-            selectedTrackId={selectedTrackId}
-            isLoading={isLoading}
-          />
-        </div>
-
-        {selectedTrackId !== undefined && tracks.length > 0 && (
-          <div>
-            <h2 className="text-2xl font-semibold mb-4">Track Details</h2>
-            <TrackInfo
-              track={tracks.find(t => t.id === selectedTrackId)!}
-            />
-          </div>
-        )}
-
-        <div>
-          <h2 className="text-2xl font-semibold mb-4">Active Referenda</h2>
-          <ReferendumList
-            referenda={referenda}
-            isLoading={isLoading}
-          />
-        </div>
-
-        <div>
-          <h2 className="text-2xl font-semibold mb-4">Your Delegations</h2>
-          <DelegationInfo
-            address={selectedAccount.address}
-            isLoading={isLoading}
-            delegations={[]}
-            delegationHistory={[]}
-            tracks={tracks}
-          />
-        </div>
+      <div>
+        <h2 className="text-2xl font-semibold mb-4">Tracks</h2>
+        <TrackList
+          tracks={tracks}
+          onSelectTrack={setSelectedTrackId}
+          selectedTrackId={selectedTrackId}
+          isLoading={isLoading}
+        />
       </div>
     </div>
   );

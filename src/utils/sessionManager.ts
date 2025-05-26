@@ -1,4 +1,5 @@
-import { securityLogger, SecurityEventType } from './securityLogger';
+import { createCipheriv, createDecipheriv, randomBytes } from 'crypto';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 interface Session {
   id: string;
@@ -12,16 +13,22 @@ interface Session {
 
 class SessionManager {
   private static instance: SessionManager;
-  private sessions: Map<string, Session> = new Map();
-  private readonly SESSION_DURATION = 3600000; // 1 hour in milliseconds
-  private readonly CLEANUP_INTERVAL = 300000; // 5 minutes in milliseconds
+  private readonly encryptionKey: Buffer;
+  private readonly algorithm = 'aes-256-gcm';
+  private sessions = new Map<string, Session>();
+  private readonly SESSION_DURATION = 3600000;
+  private readonly CLEANUP_INTERVAL = 300000;
   private readonly MAX_SESSIONS_PER_USER = 5;
 
   private constructor() {
+    const key = process.env.ENCRYPTION_KEY;
+    if (!key) {
+      throw new Error('Encryption key not configured');
+    }
+    this.encryptionKey = Buffer.from(key, 'hex');
+
     if (typeof window !== 'undefined') {
-      // Start cleanup interval in browser environment
       setInterval(() => void this.cleanupExpiredSessions(), this.CLEANUP_INTERVAL);
-      // Load sessions from localStorage
       this.loadSessions();
     }
   }
@@ -34,7 +41,6 @@ class SessionManager {
   }
 
   private generateSessionId(): string {
-    // Browser-safe random ID generation
     const array = new Uint8Array(32);
     crypto.getRandomValues(array);
     return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
@@ -61,8 +67,94 @@ class SessionManager {
     }
   }
 
+  async createEncryptedSession(address: string, ip: string, userAgent: string): Promise<string> {
+    try {
+      const iv = randomBytes(12);
+      const cipher = createCipheriv(this.algorithm, this.encryptionKey, iv);
+      
+      const payload = JSON.stringify({
+        address,
+        timestamp: Date.now(),
+        nonce: randomBytes(16).toString('hex'),
+        ip,
+        userAgent
+      });
+
+      const encrypted = Buffer.concat([
+        cipher.update(payload, 'utf8'),
+        cipher.final()
+      ]);
+
+      const authTag = cipher.getAuthTag();
+
+      const sessionToken = Buffer.concat([
+        iv,
+        authTag,
+        encrypted
+      ]).toString('base64');
+
+      return sessionToken;
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to create session',
+        ErrorCodes.AUTH.INVALID_TOKEN,
+        'Could not create secure session.'
+      );
+    }
+  }
+
+  verifyEncryptedSession(sessionToken: string, ip: string): { address: string; timestamp: number } {
+    try {
+      const sessionData = Buffer.from(sessionToken, 'base64');
+      
+      const iv = sessionData.subarray(0, 12);
+      const authTag = sessionData.subarray(12, 28);
+      const encrypted = sessionData.subarray(28);
+
+      const decipher = createDecipheriv(this.algorithm, this.encryptionKey, iv);
+      decipher.setAuthTag(authTag);
+
+      const decrypted = Buffer.concat([
+        decipher.update(encrypted),
+        decipher.final()
+      ]);
+
+      const session = JSON.parse(decrypted.toString());
+
+      const age = Date.now() - session.timestamp;
+      if (age > 24 * 60 * 60 * 1000) {
+        throw new PolkadotHubError(
+          'Session expired',
+          ErrorCodes.AUTH.EXPIRED_TOKEN,
+          'Please sign in again.'
+        );
+      }
+
+      if (session.ip !== ip) {
+        throw new PolkadotHubError(
+          'Invalid session',
+          ErrorCodes.AUTH.INVALID_TOKEN,
+          'Session IP mismatch.'
+        );
+      }
+
+      return {
+        address: session.address,
+        timestamp: session.timestamp
+      };
+    } catch (error) {
+      if (error instanceof PolkadotHubError) {
+        throw error;
+      }
+      throw new PolkadotHubError(
+        'Invalid session',
+        ErrorCodes.AUTH.INVALID_TOKEN,
+        'Session verification failed.'
+      );
+    }
+  }
+
   async createSession(userId: string, ip: string, userAgent: string): Promise<Session> {
-    // Clean up old sessions first
     await this.cleanupUserSessions(userId);
 
     const now = Date.now();
@@ -79,17 +171,6 @@ class SessionManager {
     this.sessions.set(session.id, session);
     this.saveSessions();
 
-    await securityLogger.logEvent({
-      type: SecurityEventType.AUTH_ATTEMPT,
-      timestamp: new Date().toISOString(),
-      ip,
-      userId,
-      details: {
-        action: 'session_created',
-        userAgent
-      }
-    });
-
     return session;
   }
 
@@ -97,14 +178,6 @@ class SessionManager {
     const session = this.sessions.get(sessionId);
 
     if (!session) {
-      await securityLogger.logEvent({
-        type: SecurityEventType.INVALID_TOKEN,
-        timestamp: new Date().toISOString(),
-        ip,
-        details: {
-          reason: 'Invalid session ID'
-        }
-      });
       return false;
     }
 
@@ -114,21 +187,10 @@ class SessionManager {
     }
 
     if (session.ip !== ip) {
-      await securityLogger.logEvent({
-        type: SecurityEventType.SUSPICIOUS_IP,
-        timestamp: new Date().toISOString(),
-        ip,
-        userId: session.userId,
-        details: {
-          reason: 'IP mismatch',
-          sessionIp: session.ip
-        }
-      });
       await this.destroySession(sessionId);
       return false;
     }
 
-    // Update last activity and extend session
     session.lastActivity = Date.now();
     session.expiresAt = Date.now() + this.SESSION_DURATION;
     this.sessions.set(sessionId, session);
@@ -142,16 +204,6 @@ class SessionManager {
     if (session) {
       this.sessions.delete(sessionId);
       this.saveSessions();
-      
-      await securityLogger.logEvent({
-        type: SecurityEventType.AUTH_ATTEMPT,
-        timestamp: new Date().toISOString(),
-        ip: session.ip,
-        userId: session.userId,
-        details: {
-          action: 'session_destroyed'
-        }
-      });
     }
   }
 
@@ -161,7 +213,6 @@ class SessionManager {
       .sort((a, b) => b.lastActivity - a.lastActivity);
 
     if (userSessions.length >= this.MAX_SESSIONS_PER_USER) {
-      // Keep only the most recent sessions
       const sessionsToRemove = userSessions.slice(this.MAX_SESSIONS_PER_USER - 1);
       for (const session of sessionsToRemove) {
         await this.destroySession(session.id);

@@ -109,7 +109,7 @@ export async function middleware(request: NextRequest) {
 
     // Rate limiting for API routes
     if (API_ROUTES.some(route => path.startsWith(route))) {
-      const { success, limit, remaining } = await rateLimit(ip)
+      const { success, limit, remaining } = await rateLimit(ip, path)
       
       response.headers.set('X-RateLimit-Limit', limit.toString())
       response.headers.set('X-RateLimit-Remaining', remaining.toString())
