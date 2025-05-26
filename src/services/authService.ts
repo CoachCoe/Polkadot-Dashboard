@@ -2,7 +2,8 @@ import { securityLogger, SecurityEventType } from '@/utils/securityLogger';
 import { sessionManager } from '@/utils/sessionManager';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import { cryptoWaitReady } from '@polkadot/util-crypto';
-import { u8aToHex } from '@polkadot/util';import { signatureVerify } from '@polkadot/util-crypto';
+import { u8aToHex } from '@polkadot/util';
+import { signatureVerify } from '@polkadot/util-crypto';
 import { hexToU8a } from '@polkadot/util';
 
 interface AuthChallenge {
@@ -31,31 +32,11 @@ class AuthService {
     return u8aToHex(array);
   }
 
-  async generateChallenge(address: string): Promise<AuthChallenge> {
-    await cryptoWaitReady();
-    
-    const timestamp = Date.now();
-    const nonce = this.generateNonce();
-    const message = `Sign this message to authenticate with Polkadot Dashboard\n\nWallet: ${address}\nNonce: ${nonce}\nTimestamp: ${timestamp}`;
-
-    const challenge: AuthChallenge = {
-      message,
-      timestamp,
-      expiresAt: timestamp + this.CHALLENGE_DURATION
+  async generateChallenge(address: string): Promise<{ message: string; timestamp: number }> {
+    return {
+      message: `Sign this message to authenticate with Polkadot Dashboard: ${address}`,
+      timestamp: Date.now()
     };
-
-    this.challenges.set(address, challenge);
-
-    await securityLogger.logEvent({
-      type: SecurityEventType.AUTH_ATTEMPT,
-      timestamp: new Date().toISOString(),
-      details: {
-        action: 'challenge_generated',
-        address
-      }
-    });
-
-    return challenge;
   }
 
   async verifySignature(address: string, signature: string): Promise<boolean> {
@@ -184,29 +165,13 @@ class AuthService {
     });
   }
 
-  async authenticate(address: string, signature: string, challenge: AuthChallenge): Promise<string> {
+  async authenticate(address: string, signature: string, challenge: { message: string; timestamp: number }): Promise<string> {
     try {
-      if (!address) {
+      if (!address || !signature || !challenge?.message) {
         throw new PolkadotHubError(
-          'Missing address',
+          'Missing required fields',
           ErrorCodes.AUTH.MISSING_FIELDS,
-          'Wallet address is required.'
-        );
-      }
-
-      if (!signature) {
-        throw new PolkadotHubError(
-          'Missing signature',
-          ErrorCodes.AUTH.MISSING_FIELDS,
-          'Signature is required.'
-        );
-      }
-
-      if (!challenge || !challenge.message) {
-        throw new PolkadotHubError(
-          'Missing challenge',
-          ErrorCodes.AUTH.MISSING_FIELDS,
-          'Challenge is required.'
+          'All authentication fields are required.'
         );
       }
 
@@ -225,66 +190,27 @@ class AuthService {
         );
       }
 
-      // Generate a session token
-      const sessionToken = Buffer.from(`${address}:${Date.now()}`).toString('base64');
-
-      await securityLogger.logEvent({
-        type: SecurityEventType.AUTH_SUCCESS,
-        timestamp: new Date().toISOString(),
-        details: {
-          address,
-          message: challenge.message
-        }
-      });
-
-      return sessionToken;
+      // For static export, we'll use a simple session token
+      return Buffer.from(`${address}:${Date.now()}`).toString('base64');
     } catch (error) {
-      await securityLogger.logEvent({
-        type: SecurityEventType.AUTH_FAILURE,
-        timestamp: new Date().toISOString(),
-        details: {
-          error: String(error)
-        }
-      });
       throw error;
     }
   }
 
   async verifySession(sessionToken: string): Promise<boolean> {
     try {
-      if (!sessionToken) {
-        throw new PolkadotHubError(
-          'No session token provided',
-          ErrorCodes.AUTH.NO_SESSION,
-          'Session token is required.'
-        );
-      }
+      if (!sessionToken) return false;
 
-      // In a real app, you'd verify the session token against your session store
       const [address, timestamp] = Buffer.from(sessionToken, 'base64')
         .toString()
         .split(':');
 
-      if (!address || !timestamp) {
-        throw new PolkadotHubError(
-          'Invalid session token',
-          ErrorCodes.AUTH.INVALID_TOKEN,
-          'The session token is malformed.'
-        );
-      }
+      if (!address || !timestamp) return false;
 
       const tokenAge = Date.now() - parseInt(timestamp);
-      if (tokenAge > 24 * 60 * 60 * 1000) { // 24 hours
-        throw new PolkadotHubError(
-          'Session expired',
-          ErrorCodes.AUTH.SESSION_EXPIRED,
-          'Please sign in again.'
-        );
-      }
-
-      return true;
+      return tokenAge <= 24 * 60 * 60 * 1000; // 24 hours
     } catch (error) {
-      throw error;
+      return false;
     }
   }
 

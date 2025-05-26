@@ -1,16 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { authService } from '@/services/authService';
+import { cookies } from 'next/headers';
 
 export async function GET(request: NextRequest) {
   try {
-    const sessionToken = request.cookies.get('session_token')?.value;
+    const cookieStore = cookies();
+    const sessionToken = cookieStore.get('session_token')?.value;
 
-    if (!sessionToken) {
-      return NextResponse.json({ isAuthenticated: false });
-    }
-
-    const isValid = await authService.verifySession(sessionToken);
-    return NextResponse.json({ isAuthenticated: isValid });
+    return NextResponse.json({
+      isAuthenticated: Boolean(sessionToken)
+    });
   } catch (error) {
     return NextResponse.json({ isAuthenticated: false });
   }
