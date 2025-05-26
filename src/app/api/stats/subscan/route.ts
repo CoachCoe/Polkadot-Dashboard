@@ -1,10 +1,14 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getChainStats } from '@/data/chainStats';
 
-export async function GET(request: NextRequest) {
+export const dynamic = 'force-dynamic';
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { chainId?: string } }
+) {
   try {
-    const url = new URL(request.url);
-    const chainId = url.searchParams.get('chainId');
+    const chainId = params.chainId || request.nextUrl.searchParams.get('chainId');
     
     if (!chainId) {
       return NextResponse.json(

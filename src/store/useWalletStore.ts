@@ -2,11 +2,12 @@
 
 import { create } from 'zustand';
 import type { Signer } from '@polkadot/api/types';
+import type { InjectedAccountWithMeta } from '@polkadot/extension-inject/types';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
-interface Account {
-  address: string;
-  name?: string;
+interface Account extends InjectedAccountWithMeta {
+  provider?: string;
+  balance?: string;
 }
 
 interface WalletState {
@@ -18,6 +19,7 @@ interface WalletState {
   connect: () => Promise<void>;
   disconnect: () => void;
   clearError: () => void;
+  setSelectedAccount: (account: Account | null) => void;
 }
 
 declare global {
@@ -112,8 +114,8 @@ export const useWalletStore = create<WalletState>((set) => ({
       const accounts = await waitForAccounts();
       
       const formattedAccounts = accounts.map(acc => ({
-        address: acc.address,
-        name: acc.meta.name as string
+        ...acc,
+        provider: acc.meta.source
       }));
 
       const selectedAccount = formattedAccounts[0] || null;
@@ -206,5 +208,8 @@ export const useWalletStore = create<WalletState>((set) => ({
   },
   clearError: () => {
     set({ error: null });
+  },
+  setSelectedAccount: (account) => {
+    set({ selectedAccount: account });
   }
 })); 

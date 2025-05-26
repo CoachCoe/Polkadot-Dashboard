@@ -1,4 +1,5 @@
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
+import type { DOMPurify } from 'isomorphic-dompurify';
 
 interface SanitizeOptions {
   allowedTags?: string[];
@@ -35,8 +36,18 @@ class InputSanitizer {
     'ul': ['class'],
     'li': ['class']
   };
+  private DOMPurify: DOMPurify | null = null;
 
-  private constructor() {}
+  private constructor() {
+    // Initialize DOMPurify in constructor to avoid SSR issues
+    if (typeof window !== 'undefined') {
+      import('isomorphic-dompurify').then(({ default: createDOMPurify }) => {
+        this.DOMPurify = createDOMPurify;
+      }).catch(error => {
+        console.warn('Failed to initialize DOMPurify:', error);
+      });
+    }
+  }
 
   static getInstance(): InputSanitizer {
     if (!InputSanitizer.instance) {
@@ -45,30 +56,48 @@ class InputSanitizer {
     return InputSanitizer.instance;
   }
 
-  async sanitizeString(input: string, options: SanitizeOptions = {}): Promise<string> {
+  async sanitizeString(input: string | number | boolean, options: SanitizeOptions = {}): Promise<string> {
     if (input === undefined || input === null) {
       throw new PolkadotHubError(
         'Invalid input',
         ErrorCodes.VALIDATION.INVALID_PARAMETER,
-        'Input string cannot be null or undefined'
+        'Input cannot be null or undefined'
       );
     }
 
     // Convert to string if not already
-    input = String(input).trim();
+    let sanitized = String(input).trim();
 
     const maxLength = options.maxLength || this.MAX_STRING_LENGTH;
-    if (input.length > maxLength) {
+    if (sanitized.length > maxLength) {
       throw new PolkadotHubError(
         'Input too long',
         ErrorCodes.VALIDATION.INVALID_PARAMETER,
-        `Input string exceeds maximum length of ${maxLength} characters`
+        `Input exceeds maximum length of ${maxLength} characters`
       );
     }
 
     if (options.stripHTML) {
-      // Simple HTML stripping
-      return input.replace(/<[^>]*>/g, '').trim();
+      return sanitized.replace(/<[^>]*>/g, '').trim();
+    }
+
+    // Apply case transformations if specified
+    if (options.toLowerCase) {
+      sanitized = sanitized.toLowerCase();
+    } else if (options.toUpperCase) {
+      sanitized = sanitized.toUpperCase();
+    }
+
+    // Apply character restrictions if specified
+    if (options.allowedChars) {
+      const filtered = sanitized.replace(options.allowedChars, '');
+      if (filtered !== sanitized) {
+        throw new PolkadotHubError(
+          'Invalid characters',
+          ErrorCodes.VALIDATION.INVALID_PARAMETER,
+          'Input contains invalid characters'
+        );
+      }
     }
 
     // Use configured allowed tags and attributes or defaults
@@ -76,21 +105,22 @@ class InputSanitizer {
     const allowedAttrs = options.allowedAttributes || this.ALLOWED_HTML_ATTRS;
 
     try {
-      // Only import DOMPurify in browser environment
-      if (typeof window !== 'undefined') {
-        const { default: createDOMPurify } = await import('isomorphic-dompurify');
-        return createDOMPurify.sanitize(input, {
+      if (this.DOMPurify) {
+        return this.DOMPurify.sanitize(sanitized, {
           ALLOWED_TAGS: allowedTags,
           ALLOWED_ATTR: Object.values(allowedAttrs).flat(),
-          ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i
+          ALLOWED_URI_REGEXP: /^(?:(?:(?:f|ht)tps?|mailto|tel|callto|sms|data):|[^a-z]|[a-z+.\-]+(?:[^a-z+.\-:]|$))/i,
+          RETURN_DOM: false,
+          RETURN_DOM_FRAGMENT: false,
+          WHOLE_DOCUMENT: false
         }).trim();
       }
     } catch (error) {
-      console.warn('DOMPurify not available, falling back to basic sanitization');
+      console.warn('DOMPurify sanitization failed:', error);
     }
 
-    // Fallback sanitization for server-side or when DOMPurify fails
-    return input.replace(/<(?!\/?(p|br|strong|em|ul|li)(?=>|\s.*>))\/?.*?>/g, '').trim();
+    // Fallback sanitization when DOMPurify is not available
+    return sanitized.replace(/<(?!\/?(p|br|strong|em|ul|li)(?=>|\s.*>))\/?.*?>/g, '').trim();
   }
 
   async sanitizeObject<T extends object>(obj: T, options: SanitizeOptions = {}): Promise<T> {

@@ -1,41 +1,98 @@
 import axios from 'axios';
 
-// Create axios instances with different configurations
-export const coingeckoApi = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_COINGECKO_API_KEY 
-    ? 'https://pro-api.coingecko.com/api/v3'
-    : 'https://api.coingecko.com/api/v3',
-  timeout: 10000,
-  headers: {
-    'Accept': 'application/json',
-    ...(process.env.NEXT_PUBLIC_COINGECKO_API_KEY && {
-      'X-Cg-Pro-Api-Key': process.env.NEXT_PUBLIC_COINGECKO_API_KEY
-    })
-  }
-});
+// Cache size limits
+const MAX_CACHE_SIZE = 1000;
+const MAX_CACHE_AGE = 24 * 60 * 60 * 1000; // 24 hours
 
-// Cache for API responses
-const coingeckoCache = new Map<string, { data: any; timestamp: number }>();
+// Cache TTLs
 const COINGECKO_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-
-// Cache for Subscan API responses
-const subscanCache = new Map<string, { data: any; timestamp: number; stale: boolean }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const CACHE_STALE_TTL = 30 * 60 * 1000; // 30 minutes
+
+// Rate limiting
 const RATE_LIMIT_WINDOW = 60 * 1000; // 1 minute
 const MAX_REQUESTS_PER_WINDOW = 2;
 const requestTimestamps: number[] = [];
 
+// Create axios instances with different configurations
+export const coingeckoApi = axios.create({
+  baseURL: 'https://api.coingecko.com/api/v3',
+  timeout: 10000,
+  headers: {
+    'Accept': 'application/json'
+  }
+});
+
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+
+// Cache for API responses with size limit and LRU eviction
+class LRUCache<T> {
+  private cache = new Map<string, CacheEntry<T>>();
+  private maxSize: number;
+  private maxAge: number;
+
+  constructor(maxSize: number, maxAge: number) {
+    this.maxSize = maxSize;
+    this.maxAge = maxAge;
+  }
+
+  set(key: string, value: T): void {
+    if (this.cache.size >= this.maxSize) {
+      // Get the first key from the map
+      const firstKey = this.cache.keys().next().value;
+      if (firstKey) {
+        this.cache.delete(firstKey);
+      }
+    }
+    this.cache.set(key, { data: value, timestamp: Date.now() });
+  }
+
+  get(key: string): T | null {
+    const entry = this.cache.get(key);
+    if (!entry) return null;
+
+    if (Date.now() - entry.timestamp > this.maxAge) {
+      this.cache.delete(key);
+      return null;
+    }
+
+    // Move to end (most recently used)
+    this.cache.delete(key);
+    this.cache.set(key, entry);
+    return entry.data;
+  }
+
+  clear(): void {
+    this.cache.clear();
+  }
+
+  delete(key: string): void {
+    this.cache.delete(key);
+  }
+
+  entries(): [string, CacheEntry<T>][] {
+    return Array.from(this.cache.entries());
+  }
+}
+
+// Initialize caches with size limits
+const coingeckoCache = new LRUCache<any>(MAX_CACHE_SIZE, MAX_CACHE_AGE);
+const subscanCache = new LRUCache<any>(MAX_CACHE_SIZE, MAX_CACHE_AGE);
+
+// Create Subscan API instance
 export const subscanApi = axios.create({
   baseURL: 'https://polkadot.api.subscan.io/api/v2',
   timeout: 10000,
   headers: {
     'Accept': 'application/json',
-    'Content-Type': 'application/json',
-    'X-API-Key': process.env.NEXT_PUBLIC_SUBSCAN_API_KEY || ''
+    'Content-Type': 'application/json'
   }
 });
 
+// Create DeFiLlama API instance
 export const defiLlamaApi = axios.create({
   baseURL: 'https://api.llama.fi',
   timeout: 10000,
@@ -43,6 +100,21 @@ export const defiLlamaApi = axios.create({
     'Accept': 'application/json'
   }
 });
+
+// Add API key to requests if available (server-side only)
+if (typeof window === 'undefined') {
+  const coingeckoApiKey = process.env.COINGECKO_API_KEY;
+  const subscanApiKey = process.env.SUBSCAN_API_KEY;
+
+  if (coingeckoApiKey) {
+    coingeckoApi.defaults.baseURL = 'https://pro-api.coingecko.com/api/v3';
+    coingeckoApi.defaults.headers['X-Cg-Pro-Api-Key'] = coingeckoApiKey;
+  }
+
+  if (subscanApiKey) {
+    subscanApi.defaults.headers['X-API-Key'] = subscanApiKey;
+  }
+}
 
 // Add response interceptor to handle rate limits and retries
 const MAX_RETRIES = 3;

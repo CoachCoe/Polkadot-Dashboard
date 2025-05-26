@@ -35,7 +35,7 @@ const WalletConnectClient = () => {
           className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-[#E6007A] hover:bg-[#FF1A8C] focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#E6007A] disabled:opacity-50"
           disabled={isConnecting}
         >
-          {selectedAccount.name || selectedAccount.address.slice(0, 6) + '...' + selectedAccount.address.slice(-4)}
+          {selectedAccount.meta.name || selectedAccount.address.slice(0, 6) + '...' + selectedAccount.address.slice(-4)}
         </button>
       ) : (
         <button

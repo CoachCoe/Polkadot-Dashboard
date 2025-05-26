@@ -1,125 +1,208 @@
-import React from 'react';
-import type { Referendum } from '@/services/governance';
+'use client';
 
-interface ReferendaListProps {
-  referenda: Referendum[];
-  isLoading: boolean;
-  selectedReferendum: number | null;
-  voteAmount: string;
-  onVoteAmountChange: (amount: string) => void;
-  onVote: (referendumIndex: number, voteType: 'aye' | 'nay') => Promise<void>;
-  onSelectReferendum: (index: number | null) => void;
+import React, { useState, useEffect } from 'react';
+import { useWalletStore } from '@/store/useWalletStore';
+import { governanceService, type ReferendumInfo } from '@/services/governanceService';
+import { Card } from '@/components/ui/Card';
+import { Button } from '@/components/ui/Button';
+import { ArrowPathIcon } from '@heroicons/react/24/outline';
+import { formatDistanceToNow } from 'date-fns';
+
+interface ReferendumListProps {
+  className?: string;
 }
 
-export function ReferendaList({
-  referenda,
-  isLoading,
-  selectedReferendum,
-  voteAmount,
-  onVoteAmountChange,
-  onVote,
-  onSelectReferendum
-}: ReferendaListProps) {
-  if (isLoading) {
-    return (
-      <div className="text-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-pink-600 mx-auto"></div>
-        <p className="mt-4 text-gray-600">Loading referenda...</p>
-      </div>
-    );
-  }
+export function ReferendumList({ className }: ReferendumListProps) {
+  const { selectedAccount } = useWalletStore();
+  const [referenda, setReferenda] = useState<ReferendumInfo[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [voteAmount, setVoteAmount] = useState('');
+  const [conviction, setConviction] = useState(1);
 
-  if (referenda.length === 0) {
-    return (
-      <div className="text-center py-12">
-        <p className="text-gray-600">No referenda found matching the current filters.</p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    void loadReferenda();
+    let unsubscribe: (() => void) | undefined;
+
+    const setupSubscription = async () => {
+      unsubscribe = await governanceService.subscribeToReferendumUpdates(
+        (updatedReferenda) => setReferenda(updatedReferenda)
+      );
+    };
+
+    void setupSubscription();
+
+    return () => {
+      if (unsubscribe) {
+        unsubscribe();
+      }
+    };
+  }, []);
+
+  const loadReferenda = async () => {
+    try {
+      setIsLoading(true);
+      setError(null);
+      const data = await governanceService.getReferenda();
+      setReferenda(data);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load referenda');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVote = async (referendumIndex: number, isAye: boolean) => {
+    if (!selectedAccount || !voteAmount) return;
+
+    try {
+      setError(null);
+      await governanceService.vote(
+        selectedAccount.address,
+        referendumIndex,
+        isAye,
+        conviction,
+        voteAmount
+      );
+      void loadReferenda();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to submit vote');
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status) {
+      case 'Passed':
+        return 'text-green-600 bg-green-50';
+      case 'Rejected':
+        return 'text-red-600 bg-red-50';
+      case 'Cancelled':
+        return 'text-gray-600 bg-gray-50';
+      default:
+        return 'text-yellow-600 bg-yellow-50';
+    }
+  };
 
   return (
-    <div className="mt-6 space-y-6">
-      {referenda.map((ref) => (
-        <div key={ref.index} className="bg-white rounded-lg shadow-md p-6">
-          <div className="flex justify-between items-start mb-4">
-            <div>
-              <h3 className="text-xl font-semibold">{ref.title}</h3>
-              <p className="text-gray-600 mt-1">Track: {ref.track}</p>
-            </div>
-            <span className={`
-              px-3 py-1 rounded-full text-sm font-medium
-              ${ref.status === 'Deciding' ? 'bg-blue-100 text-blue-800' :
-                ref.status === 'Confirming' ? 'bg-green-100 text-green-800' :
-                ref.status === 'Completed' ? 'bg-gray-100 text-gray-800' :
-                'bg-yellow-100 text-yellow-800'}
-            `}>
-              {ref.status}
-            </span>
-          </div>
+    <div className={className}>
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-semibold">Active Referenda</h2>
+        <Button
+          onClick={() => void loadReferenda()}
+          variant="outline"
+          className="flex items-center gap-2"
+          disabled={isLoading}
+        >
+          <ArrowPathIcon className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
+          Refresh
+        </Button>
+      </div>
 
-          <p className="text-gray-700 mb-4">{ref.description}</p>
-
-          <div className="grid grid-cols-3 gap-4 text-sm text-gray-600 mb-4">
-            <div>
-              <p className="font-medium">Ayes</p>
-              <p>{ref.tally.ayes} DOT</p>
-            </div>
-            <div>
-              <p className="font-medium">Nays</p>
-              <p>{ref.tally.nays} DOT</p>
-            </div>
-            <div>
-              <p className="font-medium">Support</p>
-              <p>{ref.tally.support} DOT</p>
-            </div>
-          </div>
-
-          {selectedReferendum === ref.index ? (
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Amount (DOT)
-                </label>
-                <input
-                  type="text"
-                  value={voteAmount}
-                  onChange={(e) => onVoteAmountChange(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md"
-                  placeholder="Enter amount to vote with"
-                />
-              </div>
-              <div className="flex space-x-4">
-                <button
-                  onClick={() => onVote(ref.index, 'aye')}
-                  className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700"
-                >
-                  Vote Aye
-                </button>
-                <button
-                  onClick={() => onVote(ref.index, 'nay')}
-                  className="flex-1 bg-red-600 text-white px-4 py-2 rounded-md hover:bg-red-700"
-                >
-                  Vote Nay
-                </button>
-                <button
-                  onClick={() => onSelectReferendum(null)}
-                  className="flex-1 border border-gray-300 px-4 py-2 rounded-md hover:bg-gray-50"
-                >
-                  Cancel
-                </button>
-              </div>
-            </div>
-          ) : (
-            <button
-              onClick={() => onSelectReferendum(ref.index)}
-              className="w-full bg-pink-600 text-white px-4 py-2 rounded-md hover:bg-pink-700"
-              disabled={ref.status === 'Completed'}
-            >
-              {ref.status === 'Completed' ? 'Voting Ended' : 'Vote on Referendum'}
-            </button>
-          )}
+      {error && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+          <p className="text-sm text-red-600">{error}</p>
         </div>
-      ))}
+      )}
+
+      <div className="space-y-4">
+        {referenda.map((referendum) => (
+          <Card key={referendum.index} className="p-6">
+            <div className="flex justify-between items-start mb-4">
+              <div>
+                <h3 className="text-lg font-medium">{referendum.title}</h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  Proposed by: {referendum.proposer.slice(0, 6)}...{referendum.proposer.slice(-4)}
+                </p>
+              </div>
+              <span
+                className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
+                  referendum.status
+                )}`}
+              >
+                {referendum.status}
+              </span>
+            </div>
+
+            <p className="text-gray-700 mb-4">{referendum.description}</p>
+
+            <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+              <div>
+                <p className="text-gray-500">Ayes</p>
+                <p className="font-medium">{referendum.voteCount.ayes} DOT</p>
+              </div>
+              <div>
+                <p className="text-gray-500">Nays</p>
+                <p className="font-medium">{referendum.voteCount.nays} DOT</p>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-sm text-gray-500">
+              <p>
+                Ends {formatDistanceToNow(referendum.end, { addSuffix: true })}
+              </p>
+              <p>Threshold: {referendum.threshold}</p>
+            </div>
+
+            {referendum.status === 'Ongoing' && selectedAccount && (
+              <div className="mt-4 pt-4 border-t">
+                <div className="flex gap-4 mb-4">
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Amount (DOT)
+                    </label>
+                    <input
+                      type="number"
+                      value={voteAmount}
+                      onChange={(e) => setVoteAmount(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md"
+                      placeholder="0.0"
+                    />
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Conviction
+                    </label>
+                    <select
+                      value={conviction}
+                      onChange={(e) => setConviction(Number(e.target.value))}
+                      className="w-full px-3 py-2 border rounded-md"
+                    >
+                      {[1, 2, 3, 4, 5, 6].map((value) => (
+                        <option key={value} value={value}>
+                          {value}x voting power ({value * 6} month lock)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex gap-4">
+                  <Button
+                    onClick={() => void handleVote(referendum.index, true)}
+                    className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                    disabled={!voteAmount || isLoading}
+                  >
+                    Vote Aye
+                  </Button>
+                  <Button
+                    onClick={() => void handleVote(referendum.index, false)}
+                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
+                    disabled={!voteAmount || isLoading}
+                  >
+                    Vote Nay
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        ))}
+
+        {referenda.length === 0 && !isLoading && (
+          <div className="text-center py-12 text-gray-500">
+            No active referenda at the moment
+          </div>
+        )}
+      </div>
     </div>
   );
 } 

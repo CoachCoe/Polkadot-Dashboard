@@ -1,28 +1,16 @@
-import { ApiPromise } from '@polkadot/api';
 import { polkadotService } from './polkadot';
-import { handleError, PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
-import { formatBalance } from '@polkadot/util';
-import type { AccountInfo, AccountData, StakingLedger } from '@polkadot/types/interfaces';
-import type { Option } from '@polkadot/types';
-import type { Vec } from '@polkadot/types';
-import type { BlockNumber } from '@polkadot/types/interfaces/runtime';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
+import { websocketService } from './websocketService';
 import BN from 'bn.js';
-
-// Add logger
-const LOG_PREFIX = '[PortfolioService]';
-const log = {
-  info: (message: string, ...args: any[]) => console.log(`${LOG_PREFIX} ${message}`, ...args),
-  error: (message: string, error?: any) => console.error(`${LOG_PREFIX} ${message}`, error || ''),
-  warn: (message: string, ...args: any[]) => console.warn(`${LOG_PREFIX} ${message}`, ...args),
-  debug: (message: string, ...args: any[]) => console.debug(`${LOG_PREFIX} ${message}`, ...args),
-  performance: (operation: string, startTime: number) => {
-    const duration = Date.now() - startTime;
-    console.log(`${LOG_PREFIX} Performance - ${operation}: ${duration}ms`);
-  }
-};
+import type { AccountInfo } from '@polkadot/types/interfaces';
+import type { StakingLedger } from '@polkadot/types/interfaces/staking';
+import type { Vec } from '@polkadot/types';
+import type { BalanceLock } from '@polkadot/types/interfaces/balances';
+import type { Option } from '@polkadot/types';
 
 export interface PortfolioBalance {
   total: string;
+  available: string;
   transferable: string;
   locked: string;
   bonded: string;
@@ -31,50 +19,57 @@ export interface PortfolioBalance {
   democracy: string;
 }
 
+export interface CrossChainBalance {
+  chain: string;
+  balance: string;
+  symbol: string;
+  price: string;
+  value: string;
+}
+
+export interface PortfolioStats {
+  totalBalance: string;
+  change24h: number;
+  changePercentage24h: number;
+  distribution: {
+    relayChain: number;
+    assetHub: number;
+    parachains: number;
+  };
+}
+
+export interface ChainBalance {
+  chain: string;
+  symbol: string;
+  balance: string;
+  usdValue: string;
+  logo: string;
+}
+
+export interface Token {
+  symbol: string;
+  name: string;
+  balance: string;
+  usdValue: string;
+  logo: string;
+  chain: string;
+}
+
 export interface Transaction {
-  hash: string;
-  type: string;
+  id: string;
+  type: 'send' | 'receive' | 'swap' | 'bridge';
   amount: string;
+  symbol: string;
+  timestamp: string;
+  status: 'pending' | 'completed' | 'failed';
   from: string;
   to: string;
-  timestamp: number;
-  status: 'success' | 'failed' | 'pending';
-  network: string;
+  chain: string;
 }
 
-interface NetworkConfig {
-  name: string;
-  endpoint: string;
-  symbol: string;
-  decimals: number;
-  subscanEndpoint?: string;
-}
-
-const NETWORKS: NetworkConfig[] = [
-  {
-    name: 'Polkadot',
-    endpoint: 'wss://rpc.polkadot.io',
-    symbol: 'DOT',
-    decimals: 10,
-    subscanEndpoint: 'https://polkadot.api.subscan.io'
-  },
-  {
-    name: 'Asset Hub',
-    endpoint: 'wss://polkadot-asset-hub-rpc.polkadot.io',
-    symbol: 'DOT',
-    decimals: 10,
-    subscanEndpoint: 'https://assethub-polkadot.api.subscan.io'
-  }
-  // Add more networks as needed
-];
-
-export class PortfolioService {
-  private api: ApiPromise | null = null;
+class PortfolioService {
   private static instance: PortfolioService;
-
-  private constructor() {
-    log.info('Initializing PortfolioService');
-  }
+  private constructor() {}
 
   static getInstance(): PortfolioService {
     if (!PortfolioService.instance) {
@@ -83,215 +78,210 @@ export class PortfolioService {
     return PortfolioService.instance;
   }
 
-  async getApi(): Promise<ApiPromise> {
-    try {
-      if (!this.api) {
-        log.info('Connecting to Polkadot API...');
-        this.api = await polkadotService.getApi();
-        log.info('Successfully connected to Polkadot API');
-      }
-      if (!this.api?.isConnected) {
-        log.error('API connection check failed');
-        throw new PolkadotHubError(
-          'Failed to connect to network',
-          ErrorCodes.NETWORK.ERROR,
-          'Unable to establish connection to the blockchain network.'
-        );
-      }
-      return this.api;
-    } catch (error) {
-      log.error('Failed to get API connection', error);
-      throw handleError(error);
-    }
-  }
-
   async getBalance(address: string): Promise<PortfolioBalance> {
-    const startTime = Date.now();
-    log.info(`Fetching balance for address: ${address}`);
-
     try {
-      const api = await this.getApi();
-      if (!api.query.system?.account) {
-        log.error('Portfolio API endpoints not available');
+      const api = await polkadotService.getApi();
+      if (!api?.query?.system?.account || !api?.query?.staking?.ledger || !api?.query?.balances?.locks) {
         throw new PolkadotHubError(
-          'Portfolio API not available',
-          ErrorCodes.API.ERROR,
-          'The portfolio API endpoints are not available. Please try again.'
+          'API not ready',
+          ErrorCodes.API.REQUEST_FAILED,
+          'API methods not available'
         );
       }
 
-      if (!api.query.system.number) {
-        throw new PolkadotHubError(
-          'System API not available',
-          ErrorCodes.API.ERROR,
-          'The system API endpoints are not available. Please try again.'
-        );
-      }
-
-      const [accountInfo, stakingInfo, democracyLocks] = await Promise.all([
+      const [accountData, stakingInfo, locks] = await Promise.all([
         api.query.system.account<AccountInfo>(address),
-        api.query.staking?.ledger?.(address) || Promise.resolve(null),
-        api.query.democracy?.locks ? 
-          api.query.democracy.locks(address).catch(() => api.createType('Vec<()>', [])) :
-          Promise.resolve(api.createType('Vec<()>', []))
+        api.query.staking.ledger<Option<StakingLedger>>(address),
+        api.query.balances.locks<Vec<BalanceLock>>(address)
       ]);
 
-      // Verify account info exists and has required properties
-      if (!accountInfo?.data) {
-        throw new PolkadotHubError(
-          'Invalid account data',
-          ErrorCodes.DATA.NOT_FOUND,
-          'Could not retrieve account information. Please try again.'
-        );
-      }
+      const { free, reserved, miscFrozen, feeFrozen } = accountData.data;
+      const totalLocked = new BN(Math.max(
+        miscFrozen.toNumber(),
+        feeFrozen.toNumber()
+      ));
 
-      // Safely log account info with null checks
-      log.debug('Account info received', {
-        free: accountInfo.data.free?.toString() || '0',
-        reserved: accountInfo.data.reserved?.toString() || '0',
-        frozen: accountInfo.data.miscFrozen?.toString() || '0'
-      });
+      const stakingLedger = stakingInfo.unwrapOr(null);
+      const bondedBalance = stakingLedger ? new BN(stakingLedger.active.toString()) : new BN(0);
+      const unbondingBalance = stakingLedger ? 
+        stakingLedger.unlocking.reduce((total: BN, chunk: any) => {
+          return total.add(new BN(chunk.value.toString()));
+        }, new BN(0)) : new BN(0);
 
-      const { free = api.createType('Balance', 0), 
-              reserved = api.createType('Balance', 0), 
-              miscFrozen: frozen = api.createType('Balance', 0) 
-            } = accountInfo.data as AccountData;
+      const democracyLock = locks.find(lock => lock.id.toString() === 'democrac');
+      const democracyLocked = democracyLock ? new BN(democracyLock.amount.toString()) : new BN(0);
 
-      try {
-        const total = free.add(reserved);
-        const transferable = free.sub(frozen);
-        const locked = frozen;
-
-        let bonded = '0';
-        let unbonding = '0';
-        let redeemable = '0';
-
-        if (stakingInfo && !stakingInfo.isEmpty) {
-          const ledger = (stakingInfo as Option<StakingLedger>).unwrap();
-          bonded = formatBalance(ledger.active || new BN(0), { decimals: 10 });
-          log.debug('Staking info received', { bonded });
-
-          if (ledger.unlocking?.length > 0) {
-            const currentBlock = await api.query.system.number<BlockNumber>();
-            const currentBlockNumber = currentBlock.toBn();
-
-            unbonding = formatBalance(
-              ledger.unlocking
-                .filter(chunk => chunk?.era?.toBn?.()?.gt?.(currentBlockNumber) ?? false)
-                .reduce((acc: BN, chunk) => acc.add(chunk?.value?.toBn?.() || new BN(0)), new BN(0)),
-              { decimals: 10 }
-            );
-
-            redeemable = formatBalance(
-              ledger.unlocking
-                .filter(chunk => chunk?.era?.toBn?.()?.lte?.(currentBlockNumber) ?? false)
-                .reduce((acc: BN, chunk) => acc.add(chunk?.value?.toBn?.() || new BN(0)), new BN(0)),
-              { decimals: 10 }
-            );
-
-            log.debug('Unlocking info processed', { unbonding, redeemable });
-          }
-        }
-
-        const democracyLocksVec = democracyLocks as Vec<any>;
-        const democracyLocked = democracyLocksVec && democracyLocksVec.length > 0 && democracyLocksVec[0]?.balance
-          ? formatBalance(
-              democracyLocksVec
-                .reduce((acc: BN, lock) => {
-                  const balance = lock?.balance?.toBn?.() || new BN(0);
-                  return acc.add(balance);
-                }, new BN(0)),
-              { decimals: 10 }
-            )
-          : '0';
-
-        log.debug('Democracy locks processed', { democracyLocked });
-
-        const balance = {
-          total: formatBalance(total, { decimals: 10 }),
-          transferable: formatBalance(transferable, { decimals: 10 }),
-          locked: formatBalance(locked, { decimals: 10 }),
-          bonded,
-          unbonding,
-          redeemable,
-          democracy: democracyLocked
-        };
-
-        log.info('Balance fetch completed successfully');
-        log.performance('getBalance', startTime);
-
-        return balance;
-      } catch (error) {
-        log.error('Error processing balance data', error);
-        throw new PolkadotHubError(
-          'Failed to process balance',
-          ErrorCodes.DATA.PARSE_ERROR,
-          'Error processing account balance data. Please try again.'
-        );
-      }
+      return {
+        total: free.add(reserved).toString(),
+        available: free.sub(totalLocked).toString(),
+        transferable: free.sub(totalLocked).toString(),
+        locked: totalLocked.toString(),
+        bonded: bondedBalance.toString(),
+        unbonding: unbondingBalance.toString(),
+        redeemable: '0', // TODO: Calculate redeemable amount
+        democracy: democracyLocked.toString()
+      };
     } catch (error) {
-      log.error('Failed to fetch balance', error);
       throw new PolkadotHubError(
         'Failed to fetch balance',
-        ErrorCodes.DATA.NOT_FOUND,
-        'Could not load portfolio balance. Please try again.'
+        ErrorCodes.API.REQUEST_FAILED,
+        'Could not load account balance. Please try again.'
       );
     }
   }
 
-  async getTransactions(address: string, limit = 10): Promise<Transaction[]> {
-    const transactions: Transaction[] = [];
-
-    for (const network of NETWORKS) {
-      if (!network.subscanEndpoint) continue;
-
-      try {
-        const response = await fetch(`${network.subscanEndpoint}/api/v2/scan/transfers`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-API-Key': process.env.NEXT_PUBLIC_SUBSCAN_API_KEY || ''
-          },
-          body: JSON.stringify({
-            address,
-            row: limit,
-            page: 0
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const data = await response.json();
-        const networkTxs = data.data.transfers.map((tx: any) => ({
-          hash: tx.hash,
-          type: tx.from === address ? 'send' : 'receive',
-          amount: formatBalance(tx.amount, { decimals: network.decimals }),
-          from: tx.from,
-          to: tx.to,
-          timestamp: tx.block_timestamp,
-          status: tx.success ? 'success' : 'failed',
-          network: network.name
-        }));
-
-        transactions.push(...networkTxs);
-      } catch (error) {
-        console.error(`Error fetching transactions for ${network.name}:`, error);
-        // Continue with other networks even if one fails
-      }
+  async getCrossChainBalances(_address: string): Promise<CrossChainBalance[]> {
+    try {
+      // TODO: Implement cross-chain balance fetching
+      return [];
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to fetch cross-chain balances',
+        ErrorCodes.API.REQUEST_FAILED,
+        'Could not load cross-chain balances. Please try again.'
+      );
     }
-
-    // Sort transactions by timestamp (newest first)
-    return transactions.sort((a, b) => b.timestamp - a.timestamp);
   }
 
-  async disconnect(): Promise<void> {
+  async getTransactions(address: string): Promise<Transaction[]> {
     try {
-      await this.api?.disconnect();
-      this.api = null;
+      // TODO: Implement actual transaction fetching
+      return [
+        {
+          id: '1',
+          type: 'send',
+          amount: '50',
+          symbol: 'DOT',
+          timestamp: new Date().toISOString(),
+          status: 'completed',
+          from: address,
+          to: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+          chain: 'Relay Chain'
+        },
+        {
+          id: '2',
+          type: 'receive',
+          amount: '100',
+          symbol: 'USDC',
+          timestamp: new Date().toISOString(),
+          status: 'completed',
+          from: '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty',
+          to: address,
+          chain: 'Asset Hub'
+        },
+        {
+          id: '3',
+          type: 'bridge',
+          amount: '25',
+          symbol: 'DOT',
+          timestamp: new Date().toISOString(),
+          status: 'pending',
+          from: address,
+          to: '0x742d35Cc6634C0532925a3b844Bc454e4438f44e',
+          chain: 'Bridge to Ethereum'
+        }
+      ];
     } catch (error) {
-      console.error('Error disconnecting from network:', error);
+      throw new PolkadotHubError(
+        'Failed to fetch transactions',
+        ErrorCodes.PORTFOLIO.TRANSACTION_ERROR,
+        'Error fetching transactions'
+      );
+    }
+  }
+
+  async subscribeToBalanceChanges(
+    address: string,
+    callback: (balance: string) => void
+  ): Promise<() => void> {
+    return websocketService.subscribeToBalanceChanges(address, callback);
+  }
+
+  async getPortfolioStats(_address: string): Promise<PortfolioStats> {
+    try {
+      // TODO: Implement actual portfolio stats fetching
+      return {
+        totalBalance: '1000',
+        change24h: 50,
+        changePercentage24h: 5,
+        distribution: {
+          relayChain: 60,
+          assetHub: 30,
+          parachains: 10
+        }
+      };
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to fetch portfolio stats',
+        ErrorCodes.PORTFOLIO.STATS_ERROR,
+        'Error fetching portfolio statistics'
+      );
+    }
+  }
+
+  async getMultiChainBalances(_address: string): Promise<ChainBalance[]> {
+    try {
+      // TODO: Implement actual chain balance fetching
+      return [
+        {
+          chain: 'Polkadot',
+          symbol: 'DOT',
+          balance: '100',
+          usdValue: '500',
+          logo: '/images/polkadot.svg'
+        },
+        {
+          chain: 'Asset Hub',
+          symbol: 'USDC',
+          balance: '500',
+          usdValue: '500',
+          logo: '/images/usdc.svg'
+        }
+      ];
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to fetch chain balances',
+        ErrorCodes.PORTFOLIO.BALANCE_ERROR,
+        'Error fetching chain balances'
+      );
+    }
+  }
+
+  async getTokenBalances(_address: string): Promise<Token[]> {
+    try {
+      // TODO: Implement actual token balance fetching
+      return [
+        {
+          symbol: 'DOT',
+          name: 'Polkadot',
+          balance: '100',
+          usdValue: '500',
+          logo: '/images/polkadot.svg',
+          chain: 'Relay Chain'
+        },
+        {
+          symbol: 'USDC',
+          name: 'USD Coin',
+          balance: '500',
+          usdValue: '500',
+          logo: '/images/usdc.svg',
+          chain: 'Asset Hub'
+        },
+        {
+          symbol: 'HDX',
+          name: 'HydraDX',
+          balance: '1000',
+          usdValue: '100',
+          logo: '/images/hydradx.svg',
+          chain: 'HydraDX'
+        }
+      ];
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to fetch token balances',
+        ErrorCodes.PORTFOLIO.TOKEN_ERROR,
+        'Error fetching token balances'
+      );
     }
   }
 }

@@ -9,10 +9,14 @@ const PROJECT_TVL: Record<string, string> = {
   'hydradx': '$45,000,000'
 };
 
-export async function GET(request: NextRequest) {
+export const dynamic = 'force-dynamic';
+
+export async function GET(
+  request: NextRequest,
+  { params }: { params: { projectId?: string } }
+) {
   try {
-    const url = new URL(request.url);
-    const projectId = url.searchParams.get('projectId');
+    const projectId = params.projectId || request.nextUrl.searchParams.get('projectId');
     
     if (!projectId) {
       return NextResponse.json(

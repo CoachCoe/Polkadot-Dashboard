@@ -1,3 +1,4 @@
+'use client';
 import { useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
 import { portfolioService, type PortfolioBalance } from '@/services/portfolioService';

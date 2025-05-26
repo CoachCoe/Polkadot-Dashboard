@@ -1,11 +1,19 @@
-import React from 'react';
-import { Transaction } from '@/services/portfolioService';
-import { Card } from '@/components/ui/Card';
-import {
-  ArrowUpIcon,
-  ArrowDownIcon,
-  ExclamationCircleIcon
-} from '@heroicons/react/24/outline';
+'use client';
+
+import { ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/24/solid';
+import { Skeleton } from '@/components/ui/Skeleton';
+
+interface Transaction {
+  id: string;
+  type: 'send' | 'receive' | 'swap' | 'bridge';
+  amount: string;
+  symbol: string;
+  timestamp: string;
+  status: 'pending' | 'completed' | 'failed';
+  from: string;
+  to: string;
+  chain: string;
+}
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -15,73 +23,62 @@ interface TransactionListProps {
 export function TransactionList({ transactions, isLoading }: TransactionListProps) {
   if (isLoading) {
     return (
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-4">Recent Transactions</h2>
-        <div className="space-y-4">
-          {[1, 2, 3].map((i) => (
-            <div key={i} className="animate-pulse flex items-center gap-4">
-              <div className="w-8 h-8 bg-gray-200 rounded-full"></div>
-              <div className="flex-1">
-                <div className="h-4 bg-gray-200 rounded w-1/4 mb-2"></div>
-                <div className="h-3 bg-gray-200 rounded w-1/3"></div>
+      <div className="space-y-4">
+        {[...Array(5)].map((_, i) => (
+          <div key={i} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+            <div className="flex items-center space-x-4">
+              <Skeleton className="h-8 w-8 rounded-full" />
+              <div>
+                <Skeleton className="h-4 w-24 mb-2" />
+                <Skeleton className="h-4 w-32" />
               </div>
             </div>
-          ))}
-        </div>
-      </Card>
-    );
-  }
-
-  if (transactions.length === 0) {
-    return (
-      <Card className="p-6">
-        <h2 className="text-xl font-semibold mb-4">Recent Transactions</h2>
-        <p className="text-gray-500 text-center py-8">No transactions found</p>
-      </Card>
+            <Skeleton className="h-4 w-24" />
+          </div>
+        ))}
+      </div>
     );
   }
 
   return (
-    <Card className="p-6">
-      <h2 className="text-xl font-semibold mb-4">Recent Transactions</h2>
-      <div className="space-y-4">
-        {transactions.map((tx) => (
-          <div key={tx.hash} className="flex items-center gap-4">
-            <div className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100">
-              {tx.type === 'send' ? (
-                <ArrowUpIcon className="w-4 h-4 text-red-500" />
+    <div className="space-y-4">
+      {transactions.map((tx) => (
+        <div key={tx.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+          <div className="flex items-center space-x-4">
+            <div className={`p-2 rounded-full ${
+              tx.type === 'receive' ? 'bg-green-100' : 'bg-blue-100'
+            }`}>
+              {tx.type === 'receive' ? (
+                <ArrowDownIcon className="w-4 h-4 text-green-600" />
               ) : (
-                <ArrowDownIcon className="w-4 h-4 text-green-500" />
+                <ArrowUpIcon className="w-4 h-4 text-blue-600" />
               )}
             </div>
-            
-            <div className="flex-1">
-              <div className="flex justify-between items-start">
-                <div>
-                  <p className="font-medium">
-                    {tx.type === 'send' ? 'Sent' : 'Received'} {tx.amount}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    {new Date(tx.timestamp * 1000).toLocaleString()}
-                  </p>
-                </div>
-                <div className="flex items-center gap-2">
-                  {tx.status === 'failed' && (
-                    <ExclamationCircleIcon className="w-4 h-4 text-red-500" />
-                  )}
-                  <span className="text-sm text-gray-500">{tx.network}</span>
-                </div>
-              </div>
-              
-              <div className="mt-1 text-sm text-gray-500">
-                <span className="font-mono">
-                  {tx.hash.slice(0, 8)}...{tx.hash.slice(-8)}
-                </span>
-              </div>
+            <div>
+              <p className="font-semibold capitalize">{tx.type}</p>
+              <p className="text-sm text-gray-500">
+                {tx.type === 'receive' ? 'From: ' : 'To: '}
+                {tx.type === 'receive' ? tx.from : tx.to}
+              </p>
             </div>
           </div>
-        ))}
-      </div>
-    </Card>
+          
+          <div className="text-right">
+            <p className="font-semibold">
+              {tx.type === 'receive' ? '+' : '-'}{tx.amount} {tx.symbol}
+            </p>
+            <p className="text-sm text-gray-500">{tx.chain}</p>
+          </div>
+
+          <div className={`ml-4 px-2 py-1 rounded text-sm ${
+            tx.status === 'completed' ? 'bg-green-100 text-green-700' :
+            tx.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
+            'bg-red-100 text-red-700'
+          }`}>
+            {tx.status}
+          </div>
+        </div>
+      ))}
+    </div>
   );
 } 

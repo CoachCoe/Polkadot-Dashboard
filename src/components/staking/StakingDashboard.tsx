@@ -1,3 +1,4 @@
+'use client';
 import React, { useState, useEffect } from 'react';
 import { usePolkadot } from '@/hooks/usePolkadot';
 import { ValidatorInfo, StakingInfo } from '@/services/polkadotApiService';

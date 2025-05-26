@@ -86,7 +86,11 @@ function checkRateLimit(address: string): boolean {
         requestCount: userRequests.count
       }
     });
-    return false;
+    throw new PolkadotHubError(
+      'Too many requests',
+      ErrorCodes.BRIDGE.TRANSFER_ERROR,
+      'Please wait before making more transfer requests.'
+    );
   }
 
   userRequests.count++;
@@ -316,7 +320,7 @@ class BridgesService {
     if (!checkRateLimit(recipient)) {
       throw new PolkadotHubError(
         'Too many requests',
-        'RATE_LIMIT_EXCEEDED',
+        ErrorCodes.BRIDGE.TRANSFER_ERROR,
         'Please wait before making more transfer requests.'
       );
     }

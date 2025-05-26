@@ -1,10 +1,14 @@
 /** @type {import('next').NextConfig} */
+const webpack = require('webpack');
+
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  experimental: {
+    optimizePackageImports: ['@polkadot/api', '@polkadot/extension-dapp'],
+  },
   webpack: (config, { isServer }) => {
     if (!isServer) {
-      // Fixes npm packages that depend on `fs` module
       config.resolve.fallback = {
         ...config.resolve.fallback,
         fs: false,
@@ -15,28 +19,47 @@ const nextConfig = {
         url: require.resolve('url'),
         https: require.resolve('https-browserify'),
         http: require.resolve('stream-http'),
-        timers: require.resolve('timers-browserify'),
-        'timers/promises': false,
         buffer: require.resolve('buffer/'),
-        util: require.resolve('util/'),
         assert: require.resolve('assert/'),
-        path: require.resolve('path-browserify'),
-        zlib: require.resolve('browserify-zlib'),
-        'node:crypto': require.resolve('crypto-browserify'),
-        'node:net': false,
-        'node:tls': false,
-        'node:timers/promises': false,
-        'node:url': require.resolve('url'),
+        os: require.resolve('os-browserify/browser'),
+        process: require.resolve('process/browser'),
+        '@polkadot/wasm-crypto': false,
+        '@polkadot/wasm-crypto-wasm': false,
+        '@polkadot/wasm-crypto-asmjs': false,
+        '@polkadot/wasm-bridge': false,
+        '@polkadot/wasm-util': false,
       };
+
+      config.plugins.push(
+        new webpack.ProvidePlugin({
+          process: 'process/browser',
+          Buffer: ['buffer', 'Buffer'],
+        }),
+      );
     }
+
+    // Handle WASM modules
+    config.experiments = {
+      ...config.experiments,
+      asyncWebAssembly: true,
+      layers: true,
+    };
+
     return config;
   },
-  output: 'export',
+  output: 'standalone',
   images: {
     unoptimized: true,
+    domains: ['raw.githubusercontent.com'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
   },
-  basePath: '/Polkadot-Dashboard',
-  assetPrefix: '/Polkadot-Dashboard',
+  basePath: process.env.NODE_ENV === 'production' ? '/Polkadot-Dashboard' : '',
+  assetPrefix: process.env.NODE_ENV === 'production' ? '/Polkadot-Dashboard' : '',
 }
 
 module.exports = nextConfig 
