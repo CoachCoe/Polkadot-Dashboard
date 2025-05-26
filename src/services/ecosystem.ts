@@ -275,6 +275,10 @@ class EcosystemService {
   getProjectById(id: string): Project | undefined {
     return this.projects.find(p => p.id === id);
   }
+
+  getAllProjects(): Project[] {
+    return this.projects;
+  }
 }
 
 export const ecosystemService = EcosystemService.getInstance(); 
