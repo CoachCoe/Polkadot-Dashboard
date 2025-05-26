@@ -79,9 +79,9 @@ class GovernanceService {
       
       if (!api.query?.referenda?.referendumCount || !api.query?.referenda?.referendumInfoFor) {
         throw new PolkadotHubError(
-          'API not ready',
+          'Governance API not available',
           ErrorCodes.NETWORK.API_ERROR,
-          'The governance API is not properly initialized.'
+          'The governance API endpoints are not available. Please try again later.'
         );
       }
 
@@ -97,7 +97,7 @@ class GovernanceService {
               throw new PolkadotHubError(
                 'Invalid referendum info',
                 ErrorCodes.VALIDATION.INVALID_INFO,
-                'Referendum information is empty.'
+                `Referendum #${index} information is not available.`
               );
             }
 
@@ -111,9 +111,9 @@ class GovernanceService {
               
               if (!api.query?.preimage?.preimageFor) {
                 throw new PolkadotHubError(
-                  'API not ready',
+                  'Preimage API not available',
                   ErrorCodes.NETWORK.API_ERROR,
-                  'The preimage API is not properly initialized.'
+                  'The preimage API endpoint is not available. Please try again later.'
                 );
               }
 
@@ -121,11 +121,31 @@ class GovernanceService {
               const preimageData = preimage.unwrapOr(null);
               
               if (!preimageData) {
-                throw new PolkadotHubError(
-                  'Invalid preimage',
-                  ErrorCodes.VALIDATION.INVALID_PREIMAGE,
-                  'Failed to parse preimage data.'
-                );
+                // Don't throw here, just log a warning and continue with placeholder data
+                await securityLogger.logEvent({
+                  type: SecurityEventType.API_ERROR,
+                  timestamp: new Date().toISOString(),
+                  details: {
+                    warning: `Missing preimage data for referendum #${index}`,
+                    hash
+                  }
+                });
+
+                return {
+                  index,
+                  track: ongoing.track.toString(),
+                  title: `Referendum #${index}`,
+                  description: 'Preimage data not available.',
+                  status,
+                  tally: {
+                    ayes: ongoing.tally.ayes.toString(),
+                    nays: ongoing.tally.nays.toString(),
+                    support: ongoing.tally.support.toString(),
+                  },
+                  enactmentPeriod: ongoing.enactment.toString(),
+                  submittedBy: ongoing.submittedBy.toString(),
+                  submittedAt: ongoing.submittedAt.toString()
+                };
               }
 
               return {
@@ -150,7 +170,7 @@ class GovernanceService {
                 track: '0', // Default track for completed referenda
                 title: `Referendum #${index}`,
                 description: 'This referendum has been completed.',
-                status,
+                status: 'Completed' as const,
                 tally: {
                   ayes: '0',
                   nays: '0',
@@ -179,6 +199,7 @@ class GovernanceService {
               };
             }
           } catch (error) {
+            // Log the error but don't fail the entire request
             await securityLogger.logEvent({
               type: SecurityEventType.API_ERROR,
               timestamp: new Date().toISOString(),
@@ -187,14 +208,51 @@ class GovernanceService {
                 referendumIndex: key.args[0]?.toString() || 'unknown'
               }
             });
-            throw handleError(error);
+
+            // Return a placeholder for failed referenda
+            return {
+              index: (key.args[0] as unknown as BN).toNumber(),
+              track: '0',
+              title: `Referendum #${(key.args[0] as unknown as BN).toNumber()}`,
+              description: 'Failed to load referendum data.',
+              status: 'Preparing' as const,
+              tally: {
+                ayes: '0',
+                nays: '0',
+                support: '0'
+              },
+              enactmentPeriod: '0',
+              submittedBy: '',
+              submittedAt: ''
+            };
           }
         })
       );
 
-      return referenda;
+      // Filter out any null values that might have occurred during processing
+      return referenda.filter(Boolean);
     } catch (error) {
-      throw handleError(error);
+      // Log the error with more context
+      await securityLogger.logEvent({
+        type: SecurityEventType.API_ERROR,
+        timestamp: new Date().toISOString(),
+        details: {
+          error: String(error),
+          component: 'GovernanceService',
+          method: 'getReferenda'
+        }
+      });
+
+      if (error instanceof PolkadotHubError) {
+        throw error;
+      }
+
+      throw new PolkadotHubError(
+        'Failed to load governance data',
+        ErrorCodes.DATA.ECOSYSTEM_LOAD_ERROR,
+        'Unable to fetch referenda information. Please try again later.',
+        error
+      );
     }
   }
 

@@ -34,7 +34,8 @@ export function GovernanceCharts({
       values: recentReferenda.map(ref => {
         const ayes = parseFloat(ref.tally.ayes) || 0;
         const nays = parseFloat(ref.tally.nays) || 0;
-        return ayes / (ayes + nays) * 100;
+        const total = ayes + nays;
+        return total > 0 ? (ayes / total * 100) : 0;
       }),
       colors: ['#EC4899'] // pink-600
     };
@@ -55,7 +56,8 @@ export function GovernanceCharts({
       values: tracks.map(track => {
         const trackRefs = referenda.filter(ref => ref.track === track.id.toString());
         if (trackRefs.length === 0) return 0;
-        return trackRefs.reduce((acc, ref) => acc + (parseFloat(ref.tally.support) || 0), 0) / trackRefs.length * 100;
+        const totalSupport = trackRefs.reduce((acc, ref) => acc + (parseFloat(ref.tally.support) || 0), 0);
+        return (totalSupport / trackRefs.length) * 100;
       }),
       colors: ['#EC4899']
     };
@@ -68,6 +70,14 @@ export function GovernanceCharts({
   };
 
   const renderBarChart = (data: ChartData, height: number = 200) => {
+    if (data.values.length === 0) {
+      return (
+        <div className="flex items-center justify-center h-[200px] text-gray-500">
+          No data available
+        </div>
+      );
+    }
+
     const maxValue = Math.max(...data.values, 0.1);
     
     return (
@@ -94,9 +104,17 @@ export function GovernanceCharts({
   };
 
   const renderLineChart = (data: ChartData) => {
+    if (data.values.length <= 1) {
+      return (
+        <div className="flex items-center justify-center h-[200px] text-gray-500">
+          Not enough data for trend visualization
+        </div>
+      );
+    }
+
     const maxValue = Math.max(...data.values, 0.1);
     const points = data.values.map((value, index) => ({
-      x: (index / (data.values.length - 1)) * 100,
+      x: data.values.length > 1 ? (index / (data.values.length - 1)) * 100 : 0,
       y: (value / maxValue) * 100
     }));
 
@@ -108,7 +126,7 @@ export function GovernanceCharts({
 
     return (
       <div className="relative h-[200px] mt-8">
-        <svg className="w-full h-full">
+        <svg className="w-full h-full" preserveAspectRatio="none">
           <path
             d={pathData}
             fill="none"

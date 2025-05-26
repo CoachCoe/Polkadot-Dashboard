@@ -10,9 +10,12 @@ const FALLBACK_DATA = {
   isStale: true
 };
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
-    const chainId = request.nextUrl.searchParams.get('chainId');
+    const url = new URL(request.url);
+    const chainId = url.searchParams.get('chainId');
     
     if (!chainId) {
       return NextResponse.json(

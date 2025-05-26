@@ -81,8 +81,23 @@ export function useAuth() {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
+      // Get CSRF token from environment
+      const csrfToken = process.env.NEXT_PUBLIC_CSRF_TOKEN;
+      if (!csrfToken) {
+        throw new PolkadotHubError(
+          'Missing CSRF token',
+          ErrorCodes.AUTH.MISSING_FIELDS,
+          'Security configuration error.'
+        );
+      }
+
       // Get challenge
-      const response = await fetch(`/api/auth?address=${encodeURIComponent(selectedAccount.address)}`);
+      const response = await fetch(`/api/auth?address=${encodeURIComponent(selectedAccount.address)}`, {
+        headers: {
+          'x-csrf-token': csrfToken
+        }
+      });
+      
       if (!response.ok) {
         const error = await response.json();
         throw new PolkadotHubError(
@@ -114,6 +129,7 @@ export function useAuth() {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'x-csrf-token': csrfToken
         },
         body: JSON.stringify({
           address: selectedAccount.address,
@@ -149,20 +165,32 @@ export function useAuth() {
     try {
       setAuthState(prev => ({ ...prev, isLoading: true, error: null }));
 
-      const response = await fetch('/api/auth/logout', { 
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
+      // Get CSRF token from environment
+      const csrfToken = process.env.NEXT_PUBLIC_CSRF_TOKEN;
+      if (!csrfToken) {
+        console.warn('Missing CSRF token during logout');
+        // Don't throw, just clear local state
+        setAuthState(prev => ({ ...prev, isLoading: false, error: null }));
+        return;
+      }
+
+      try {
+        const response = await fetch('/api/auth/logout', { 
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-csrf-token': csrfToken
+          }
+        });
+        
+        if (!response.ok) {
+          const error = await response.json();
+          console.warn('Logout API error:', error);
+          // Don't throw on API errors, just clear local state
         }
-      });
-      
-      if (!response.ok) {
-        const error = await response.json();
-        throw new PolkadotHubError(
-          error.message || 'Failed to logout',
-          ErrorCodes.AUTH.SESSION_EXPIRED,
-          'Failed to logout. Please try again.'
-        );
+      } catch (err) {
+        console.warn('Logout request failed:', err);
+        // Don't throw network errors, just clear local state
       }
 
       setAuthState(prev => ({ ...prev, error: null }));

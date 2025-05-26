@@ -43,9 +43,9 @@ export async function authMiddleware(request: NextRequest) {
       return NextResponse.next();
     }
 
-    const sessionId = request.cookies.get('session_id')?.value;
+    const sessionToken = request.cookies.get('session_token')?.value;
 
-    if (!sessionId) {
+    if (!sessionToken) {
       await securityLogger.logEvent({
         type: SecurityEventType.AUTH_ATTEMPT,
         timestamp: new Date().toISOString(),
@@ -73,7 +73,7 @@ export async function authMiddleware(request: NextRequest) {
       );
     }
 
-    const isValid = await authService.validateSession(sessionId, ip);
+    const isValid = await authService.verifySession(sessionToken);
 
     if (!isValid) {
       await securityLogger.logEvent({
@@ -102,7 +102,7 @@ export async function authMiddleware(request: NextRequest) {
         }
       );
 
-      response.cookies.delete('session_id');
+      response.cookies.delete('session_token');
       return response;
     }
 

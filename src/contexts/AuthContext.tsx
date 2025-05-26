@@ -17,7 +17,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const { selectedAccount, disconnect: disconnectWallet, error: walletError } = useWalletStore();
+  const { disconnect: disconnectWallet, error: walletError } = useWalletStore();
   const { login, logout, isLoading, error: authError } = useAuth();
   const [error, setError] = useState<PolkadotHubError | null>(null);
 
@@ -41,15 +41,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const connect = async () => {
     try {
       setError(null);
-
-      // Wait for selectedAccount to be available
-      if (!selectedAccount) {
-        throw new PolkadotHubError(
-          'Please connect your wallet first',
-          ErrorCodes.WALLET.NOT_CONNECTED,
-          'Connect your wallet to authenticate with Polkadot Dashboard.'
-        );
-      }
 
       // Check if we're already authenticated
       if (isAuthenticated) {

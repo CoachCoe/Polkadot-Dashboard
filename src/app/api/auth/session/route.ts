@@ -3,14 +3,13 @@ import { authService } from '@/services/authService';
 
 export async function GET(request: NextRequest) {
   try {
-    const sessionId = request.cookies.get('session_id')?.value;
-    const ip = request.ip ?? 'anonymous';
+    const sessionToken = request.cookies.get('session_token')?.value;
 
-    if (!sessionId) {
+    if (!sessionToken) {
       return NextResponse.json({ isAuthenticated: false });
     }
 
-    const isValid = await authService.validateSession(sessionId, ip);
+    const isValid = await authService.verifySession(sessionToken);
     return NextResponse.json({ isAuthenticated: isValid });
   } catch (error) {
     return NextResponse.json({ isAuthenticated: false });

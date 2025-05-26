@@ -184,7 +184,7 @@ class AuthService {
     });
   }
 
-  async authenticate(address: string, signature: string, message: string): Promise<string> {
+  async authenticate(address: string, signature: string, challenge: AuthChallenge): Promise<string> {
     try {
       if (!address) {
         throw new PolkadotHubError(
@@ -202,16 +202,20 @@ class AuthService {
         );
       }
 
-      if (!message) {
+      if (!challenge || !challenge.message) {
         throw new PolkadotHubError(
-          'Missing message',
+          'Missing challenge',
           ErrorCodes.AUTH.MISSING_FIELDS,
-          'Message is required.'
+          'Challenge is required.'
         );
       }
 
       // Verify the signature using Polkadot.js util-crypto
-      const { isValid } = signatureVerify(message, hexToU8a(signature), address);
+      const { isValid } = signatureVerify(
+        challenge.message,
+        hexToU8a(signature),
+        address
+      );
 
       if (!isValid) {
         throw new PolkadotHubError(
@@ -221,7 +225,7 @@ class AuthService {
         );
       }
 
-      // Generate a session token (in a real app, you'd want to use a proper session management system)
+      // Generate a session token
       const sessionToken = Buffer.from(`${address}:${Date.now()}`).toString('base64');
 
       await securityLogger.logEvent({
@@ -229,7 +233,7 @@ class AuthService {
         timestamp: new Date().toISOString(),
         details: {
           address,
-          message
+          message: challenge.message
         }
       });
 

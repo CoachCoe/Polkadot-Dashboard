@@ -10,9 +10,12 @@ const PROJECT_ID_MAP: Record<string, { chain?: string; protocol?: string }> = {
   'hydradx': { protocol: 'hydradx' }
 };
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(request: NextRequest) {
   try {
-    const projectId = request.nextUrl.searchParams.get('projectId');
+    const url = new URL(request.url);
+    const projectId = url.searchParams.get('projectId');
     
     if (!projectId) {
       return NextResponse.json(

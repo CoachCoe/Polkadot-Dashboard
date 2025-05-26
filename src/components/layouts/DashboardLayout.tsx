@@ -15,14 +15,6 @@ export function DashboardLayout({ children }: DashboardLayoutProps) {
               <Link href="/" className="flex items-center gap-2">
                 <span className="text-xl font-bold text-[#E6007A]">Polkadot Dashboard</span>
               </Link>
-              <div className="hidden sm:ml-6 sm:flex sm:space-x-8">
-                <Link
-                  href="/ecosystem"
-                  className="text-[#666666] hover:text-[#E6007A] px-3 py-2 text-sm font-medium"
-                >
-                  Ecosystem
-                </Link>
-              </div>
             </div>
           </div>
         </div>

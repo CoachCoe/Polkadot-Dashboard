@@ -18,13 +18,35 @@ interface StakingResponse {
   } | null;
 }
 
-class PolkadotService {
-  private api: ApiPromise | null = null;
-  private connecting: Promise<ApiPromise> | null = null;
-  private static instance: PolkadotService;
-  private readonly wsEndpoint = 'wss://rpc.polkadot.io';
+export const initializeApi = async (endpoint: string = 'wss://rpc.polkadot.io'): Promise<ApiPromise> => {
+  try {
+    // Create provider
+    const provider = new WsProvider(endpoint);
 
-  private constructor() {}
+    // Initialize API with custom options
+    const api = await ApiPromise.create({
+      provider,
+      noInitWarn: true // Suppress initialization warnings
+    });
+
+    // Wait for API to be ready
+    await api.isReady;
+
+    return api;
+  } catch (error) {
+    console.error('Failed to initialize Polkadot API:', error);
+    throw error;
+  }
+};
+
+class PolkadotService {
+  private static instance: PolkadotService;
+  public api: ApiPromise | null = null;
+  private wsEndpoint: string;
+
+  private constructor() {
+    this.wsEndpoint = 'wss://rpc.polkadot.io';
+  }
 
   static getInstance(): PolkadotService {
     if (!PolkadotService.instance) {
@@ -33,61 +55,85 @@ class PolkadotService {
     return PolkadotService.instance;
   }
 
-  private async connect(): Promise<ApiPromise> {
-    if (!this.connecting) {
-      this.connecting = (async () => {
-        try {
-          const provider = new WsProvider(this.wsEndpoint);
-          this.api = await ApiPromise.create({ provider });
+  async connect(): Promise<ApiPromise> {
+    try {
+      // If already connected, return the existing API
+      if (this.api?.isConnected) {
+        return this.api;
+      }
 
-          if (!this.api.isConnected) {
-            throw new PolkadotHubError(
-              'Failed to establish connection',
-              'NETWORK_ERROR',
-              'Could not connect to Polkadot network'
-            );
-          }
+      // Create new connection
+      this.api = await initializeApi(this.wsEndpoint);
 
-          await securityLogger.logEvent({
-            type: SecurityEventType.API_ERROR,
-            timestamp: new Date().toISOString(),
-            details: {
-              event: 'NETWORK_CONNECT',
-              endpoint: this.wsEndpoint,
-              status: 'connected'
-            }
-          });
+      // Set up event handlers
+      this.api.on('error', (error: Error) => {
+        console.error('API error:', error);
+      });
 
-          return this.api;
-        } catch (error) {
-          this.connecting = null;
-          this.api = null;
-          
-          await securityLogger.logEvent({
-            type: SecurityEventType.API_ERROR,
-            timestamp: new Date().toISOString(),
-            details: {
-              error: String(error),
-              endpoint: this.wsEndpoint
-            }
-          });
+      this.api.on('disconnected', () => {
+        console.warn('API disconnected. Attempting to reconnect...');
+        this.api?.connect();
+      });
 
-          throw handleError(error);
+      await securityLogger.logEvent({
+        type: SecurityEventType.API_ERROR,
+        timestamp: new Date().toISOString(),
+        details: {
+          event: 'NETWORK_CONNECT',
+          endpoint: this.wsEndpoint,
+          status: 'connected'
         }
-      })();
+      });
+
+      return this.api;
+    } catch (error) {
+      this.api = null;
+      
+      await securityLogger.logEvent({
+        type: SecurityEventType.API_ERROR,
+        timestamp: new Date().toISOString(),
+        details: {
+          error: String(error),
+          endpoint: this.wsEndpoint
+        }
+      });
+
+      throw handleError(error);
     }
-    return this.connecting;
+  }
+
+  async disconnect(): Promise<void> {
+    try {
+      if (this.api) {
+        await this.api.disconnect();
+        this.api = null;
+
+        await securityLogger.logEvent({
+          type: SecurityEventType.API_ERROR,
+          timestamp: new Date().toISOString(),
+          details: {
+            event: 'NETWORK_DISCONNECT',
+            endpoint: this.wsEndpoint,
+            status: 'disconnected'
+          }
+        });
+      }
+    } catch (error) {
+      await securityLogger.logEvent({
+        type: SecurityEventType.API_ERROR,
+        timestamp: new Date().toISOString(),
+        details: {
+          error: String(error),
+          action: 'DISCONNECT'
+        }
+      });
+      throw handleError(error);
+    }
   }
 
   async getApi(): Promise<ApiPromise> {
     try {
-      if (!this.api) {
-        await this.connect();
-      }
-      
-      if (!this.api?.isConnected) {
-        this.api = null;
-        this.connecting = null;
+      if (!this.api || !this.api.isConnected) {
         await this.connect();
       }
 
@@ -314,36 +360,6 @@ class PolkadotService {
           error: String(error),
           address,
           validatorId
-        }
-      });
-      throw handleError(error);
-    }
-  }
-
-  async disconnect(): Promise<void> {
-    try {
-      if (this.api) {
-        await this.api.disconnect();
-        this.api = null;
-        this.connecting = null;
-
-        await securityLogger.logEvent({
-          type: SecurityEventType.API_ERROR,
-          timestamp: new Date().toISOString(),
-          details: {
-            event: 'NETWORK_DISCONNECT',
-            endpoint: this.wsEndpoint,
-            status: 'disconnected'
-          }
-        });
-      }
-    } catch (error) {
-      await securityLogger.logEvent({
-        type: SecurityEventType.API_ERROR,
-        timestamp: new Date().toISOString(),
-        details: {
-          error: String(error),
-          action: 'DISCONNECT'
         }
       });
       throw handleError(error);

@@ -3,6 +3,13 @@ import { coingeckoApi } from '@/config/api';
 
 const MAX_RETRIES = 3;
 const RETRY_DELAY = 1000; // 1 second
+const FALLBACK_DATA = {
+  price: '$0.00',
+  marketCap: '$0',
+  volume24h: '$0'
+};
+
+export const dynamic = 'force-dynamic';
 
 async function fetchWithRetry(projectId: string, retryCount = 0): Promise<any> {
   try {
@@ -17,7 +24,8 @@ async function fetchWithRetry(projectId: string, retryCount = 0): Promise<any> {
 
     const data = response.data[projectId];
     if (!data) {
-      return null;
+      console.warn(`No data returned from CoinGecko for ${projectId}`);
+      return FALLBACK_DATA;
     }
 
     return {
@@ -27,10 +35,19 @@ async function fetchWithRetry(projectId: string, retryCount = 0): Promise<any> {
     };
   } catch (error: any) {
     // Handle rate limiting
-    if (error.response?.status === 429 && retryCount < MAX_RETRIES) {
+    if (error.response?.status === 429) {
+      console.warn(`CoinGecko rate limit hit for ${projectId}`);
       const retryAfter = parseInt(error.response.headers['retry-after'] || '60', 10);
-      await new Promise(resolve => setTimeout(resolve, Math.min(retryAfter * 1000, RETRY_DELAY)));
-      return fetchWithRetry(projectId, retryCount + 1);
+      
+      if (retryCount < MAX_RETRIES) {
+        console.log(`Retrying after ${retryAfter}s (attempt ${retryCount + 1}/${MAX_RETRIES})`);
+        await new Promise(resolve => setTimeout(resolve, Math.min(retryAfter * 1000, RETRY_DELAY)));
+        return fetchWithRetry(projectId, retryCount + 1);
+      }
+      
+      // If we've exhausted retries, return fallback data
+      console.warn(`Max retries reached for ${projectId}, returning fallback data`);
+      return FALLBACK_DATA;
     }
     throw error;
   }
@@ -38,7 +55,8 @@ async function fetchWithRetry(projectId: string, retryCount = 0): Promise<any> {
 
 export async function GET(request: NextRequest) {
   try {
-    const projectId = request.nextUrl.searchParams.get('projectId');
+    const url = new URL(request.url);
+    const projectId = url.searchParams.get('projectId');
     
     if (!projectId) {
       return NextResponse.json(
@@ -48,25 +66,11 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await fetchWithRetry(projectId);
-    if (!data) {
-      return NextResponse.json({});
-    }
-
     return NextResponse.json(data);
   } catch (error) {
     console.error('Error fetching Coingecko data:', error);
     
-    if (error instanceof Error) {
-      const status = error.message.includes('rate limit') ? 429 : 500;
-      return NextResponse.json(
-        { error: 'Failed to fetch price data', details: error.message },
-        { status }
-      );
-    }
-    
-    return NextResponse.json(
-      { error: 'Failed to fetch price data' },
-      { status: 500 }
-    );
+    // Return fallback data instead of error for better UX
+    return NextResponse.json(FALLBACK_DATA);
   }
 } 

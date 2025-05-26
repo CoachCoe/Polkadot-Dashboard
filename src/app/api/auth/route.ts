@@ -7,7 +7,7 @@ import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { address, signature, message } = body;
+    const { address, signature, challenge } = body;
 
     // Validate required fields
     if (!address) {
@@ -18,16 +18,16 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!signature || !message) {
+    if (!signature || !challenge) {
       throw new PolkadotHubError(
         'Missing required fields',
         ErrorCodes.AUTH.MISSING_FIELDS,
-        'Signature and message are required.'
+        'Signature and challenge are required.'
       );
     }
 
     // Verify signature and create session
-    const sessionToken = await authService.authenticate(address, signature, message);
+    const sessionToken = await authService.authenticate(address, signature, challenge);
 
     // Log successful authentication
     await securityLogger.logEvent({
@@ -35,7 +35,7 @@ export async function POST(request: NextRequest) {
       timestamp: new Date().toISOString(),
       details: {
         address,
-        message
+        challenge: challenge.message
       }
     });
 
