@@ -84,7 +84,13 @@ const nextConfig = {
         ]
       }
     ]
-  }
+  },
+  output: 'export',
+  images: {
+    unoptimized: true,
+  },
+  basePath: '/Polkadot-Dashboard',
+  assetPrefix: '/Polkadot-Dashboard/',
 }
 
 module.exports = nextConfig 
