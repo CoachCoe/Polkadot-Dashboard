@@ -4,6 +4,8 @@ const webpack = require('webpack');
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  output: 'export',
+  distDir: 'out',
   experimental: {
     optimizePackageImports: ['@polkadot/api', '@polkadot/extension-dapp'],
   },
@@ -47,7 +49,6 @@ const nextConfig = {
 
     return config;
   },
-  output: 'standalone',
   images: {
     unoptimized: true,
     domains: ['raw.githubusercontent.com'],
