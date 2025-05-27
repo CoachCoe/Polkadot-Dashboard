@@ -2,63 +2,42 @@
 
 import React from 'react';
 import { Card } from '@/components/ui/Card';
+import { bridgeService, BridgeProvider } from '@/services/bridgeService';
 import { Badge } from '@/components/ui/Badge';
-import { BridgeProvider } from '@/services/bridgeService';
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
+import { Button } from '@/components/ui/Button';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 
 interface BridgeDirectoryProps {
-  onSelectBridge?: (bridgeId: string) => void;
+  onSelectBridge: (bridgeId: string) => void;
 }
 
 export function BridgeDirectory({ onSelectBridge }: BridgeDirectoryProps) {
   const [bridges, setBridges] = React.useState<BridgeProvider[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
+  const [selectedTab, setSelectedTab] = React.useState('all');
 
   React.useEffect(() => {
     const loadBridges = async () => {
       try {
-        // TODO: Replace with actual bridge service call
-        const mockBridges: BridgeProvider[] = [
-          {
-            id: 'xcm',
-            name: 'XCM Transfer',
-            description: 'Native cross-chain messaging for Polkadot ecosystem',
-            supportedChains: ['asset-hub', 'acala', 'astar', 'moonbeam'],
-            minimumAmount: '1',
-            maximumAmount: '10000',
-            estimatedTime: '2-5 minutes',
-            fee: '0.5'
-          },
-          {
-            id: 'wormhole',
-            name: 'Wormhole',
-            description: 'Secure and fast cross-chain bridge',
-            supportedChains: ['polkadot', 'ethereum', 'solana', 'binance-smart-chain'],
-            minimumAmount: '10',
-            maximumAmount: '1000000',
-            estimatedTime: '15-20 minutes',
-            fee: '0.1%'
-          },
-          {
-            id: 'multichain',
-            name: 'Multichain',
-            description: 'Cross-chain router protocol',
-            supportedChains: ['polkadot', 'ethereum', 'binance-smart-chain'],
-            minimumAmount: '50',
-            maximumAmount: '500000',
-            estimatedTime: '10-30 minutes',
-            fee: '0.3%'
-          }
-        ];
-        setBridges(mockBridges);
-        setIsLoading(false);
+        const data = await bridgeService.getBridgeProviders();
+        setBridges(data);
       } catch (error) {
         console.error('Failed to load bridges:', error);
+      } finally {
         setIsLoading(false);
       }
     };
 
     loadBridges();
   }, []);
+
+  const filteredBridges = React.useMemo(() => {
+    if (selectedTab === 'all') return bridges;
+    return bridges.filter(bridge => 
+      selectedTab === 'native' ? !bridge.isThirdParty : bridge.isThirdParty
+    );
+  }, [bridges, selectedTab]);
 
   if (isLoading) {
     return (
@@ -69,50 +48,92 @@ export function BridgeDirectory({ onSelectBridge }: BridgeDirectoryProps) {
   }
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {bridges.map((bridge) => (
-        <Card
-          key={bridge.id}
-          className="p-4 hover:shadow-lg transition-shadow cursor-pointer"
-          onClick={() => onSelectBridge?.(bridge.id)}
-        >
-          <div className="flex flex-col space-y-4">
-            <div className="flex items-start justify-between">
+    <div className="space-y-6">
+      <div className="flex justify-between items-center">
+        <h2 className="text-2xl font-bold">Available Bridges</h2>
+        <Tabs value={selectedTab} onValueChange={setSelectedTab}>
+          <TabsList>
+            <TabsTrigger value="all">All Bridges</TabsTrigger>
+            <TabsTrigger value="native">Native</TabsTrigger>
+            <TabsTrigger value="third-party">Third Party</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {filteredBridges.map((bridge) => (
+          <Card key={bridge.id} className="p-6 hover:shadow-lg transition-shadow">
+            <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-lg font-semibold">{bridge.name}</h3>
-                <p className="text-sm text-gray-500">{bridge.description}</p>
+                <h3 className="text-xl font-semibold">{bridge.name}</h3>
+                <p className="text-gray-600 mt-1">{bridge.description}</p>
+              </div>
+              <Badge variant={bridge.isThirdParty ? "secondary" : "default"}>
+                {bridge.isThirdParty ? "Third Party" : "Native"}
+              </Badge>
+            </div>
+
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-600">Supported Chains</p>
+                  <div className="flex flex-wrap gap-2 mt-1">
+                    {bridge.supportedChains.map((chain) => (
+                      <Badge key={chain} variant="outline">
+                        {chain}
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-gray-600">Transfer Limits</p>
+                  <p className="mt-1">Min: {bridge.minimumAmount}</p>
+                  <p className="mt-1">Max: {bridge.maximumAmount}</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-gray-600">Estimated Time</p>
+                  <p className="mt-1">{bridge.estimatedTime}</p>
+                </div>
+                <div>
+                  <p className="text-gray-600">Fee</p>
+                  <p className="mt-1">{bridge.fee}</p>
+                </div>
+              </div>
+
+              <div className="flex justify-between items-center pt-4 border-t">
+                <div className="flex gap-4">
+                  {bridge.website && (
+                    <a
+                      href={bridge.website}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                    >
+                      Website <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                    </a>
+                  )}
+                  {bridge.documentation && (
+                    <a
+                      href={bridge.documentation}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-sm text-primary hover:underline flex items-center gap-1"
+                    >
+                      Documentation <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                    </a>
+                  )}
+                </div>
+                <Button onClick={() => onSelectBridge(bridge.id)}>
+                  Use Bridge
+                </Button>
               </div>
             </div>
-            
-            <div className="flex flex-wrap gap-2">
-              {bridge.supportedChains.map((chain) => (
-                <Badge key={chain} variant="secondary">
-                  {chain}
-                </Badge>
-              ))}
-            </div>
-            
-            <div className="grid grid-cols-2 gap-2 text-sm">
-              <div>
-                <span className="text-gray-500">Min Amount:</span>
-                <span className="ml-1">{bridge.minimumAmount} DOT</span>
-              </div>
-              <div>
-                <span className="text-gray-500">Max Amount:</span>
-                <span className="ml-1">{bridge.maximumAmount} DOT</span>
-              </div>
-              <div>
-                <span className="text-gray-500">Est. Time:</span>
-                <span className="ml-1">{bridge.estimatedTime}</span>
-              </div>
-              <div>
-                <span className="text-gray-500">Fee:</span>
-                <span className="ml-1">{bridge.fee}</span>
-              </div>
-            </div>
-          </div>
-        </Card>
-      ))}
+          </Card>
+        ))}
+      </div>
     </div>
   );
 } 

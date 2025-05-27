@@ -2,6 +2,7 @@ import { ApiPromise } from '@polkadot/api';
 import { polkadotService } from './polkadot';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import type { AddressOrPair } from '@polkadot/api/types';
+import { formatBalance } from '@/utils/formatters';
 
 export interface BridgeProvider {
   id: string;
@@ -59,6 +60,12 @@ export interface OnRampQuote {
   rate: string;
   fee: string;
   total: string;
+}
+
+interface XcmTransferParams {
+  destChain: string;
+  destAddress: string;
+  amount: string;
 }
 
 class BridgeService {
@@ -157,6 +164,47 @@ class BridgeService {
     return this.onRampProviders;
   }
 
+  private async getXcmTransferTx({ destChain, destAddress, amount }: XcmTransferParams) {
+    const api = await polkadotService.getApi();
+    if (!api?.tx?.xcmPallet?.reserveTransferAssets) {
+      throw new PolkadotHubError(
+        'XCM transfer not available',
+        ErrorCodes.API.ERROR,
+        'XCM transfer functionality is not available on this chain.'
+      );
+    }
+
+    // Get parachain ID for destination chain
+    const parachainId = this.getParachainId(destChain);
+    if (!parachainId) {
+      throw new PolkadotHubError(
+        'Invalid destination chain',
+        ErrorCodes.BRIDGE.ERROR,
+        'The selected destination chain is not supported.'
+      );
+    }
+
+    // Construct XCM message
+    const transferCall = api.tx.xcmPallet.reserveTransferAssets(
+      { V3: { parents: 0, interior: { X1: { ParaChain: parachainId } } } }, // destination
+      { V3: { parents: 0, interior: { X1: { AccountId32: { network: 'Any', id: destAddress } } } } }, // beneficiary
+      { V3: [{ id: { Concrete: { parents: 0, interior: 'Here' } }, fun: { Fungible: amount } }] }, // assets
+      0 // fee index
+    );
+
+    return transferCall;
+  }
+
+  private getParachainId(chain: string): number | null {
+    const parachainIds: Record<string, number> = {
+      'asset-hub': 1000,
+      'acala': 2000,
+      'astar': 2006,
+      'moonbeam': 2004
+    };
+    return parachainIds[chain] || null;
+  }
+
   async getBridgeQuote(
     fromChain: string,
     toChain: string,
@@ -164,7 +212,6 @@ class BridgeService {
     providerId?: string
   ): Promise<BridgeQuote> {
     try {
-      // Find available providers for the chain pair
       const availableProviders = this.bridgeProviders.filter(p => 
         p.supportedChains.includes(fromChain) && 
         p.supportedChains.includes(toChain)
@@ -178,7 +225,6 @@ class BridgeService {
         );
       }
 
-      // If providerId is specified, use that provider
       const provider = providerId 
         ? availableProviders.find(p => p.id === providerId)
         : availableProviders[0];
@@ -191,20 +237,45 @@ class BridgeService {
         );
       }
 
-      // TODO: Implement actual quote fetching from bridge providers
+      if (provider.id === 'xcm') {
+        const api = await polkadotService.getApi();
+        if (!api) throw new Error('API not initialized');
+
+        // Get XCM transfer fee estimation
+        const dummyAddress = '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY'; // Alice's address for estimation
+        const transferTx = await this.getXcmTransferTx({
+          destChain: toChain,
+          destAddress: dummyAddress,
+          amount
+        });
+
+        const info = await transferTx.paymentInfo(dummyAddress);
+        const fee = info.partialFee.toString();
+
+        return {
+          amount,
+          fee: formatBalance(fee),
+          estimatedTime: provider.estimatedTime,
+          route: [fromChain, toChain],
+          provider: provider.name,
+          expectedOutput: formatBalance((BigInt(amount) - BigInt(fee)).toString())
+        };
+      }
+
+      // For third-party bridges, return their standard fees
       return {
         amount,
         fee: provider.fee,
         estimatedTime: provider.estimatedTime,
         route: [fromChain, toChain],
         provider: provider.name,
-        expectedOutput: amount // In a real implementation, this would be calculated
+        expectedOutput: amount // This would be calculated based on provider's rates
       };
     } catch (error) {
       throw new PolkadotHubError(
         'Failed to get bridge quote',
         ErrorCodes.BRIDGE.ESTIMATE_ERROR,
-        'Error getting bridge transfer quote'
+        error instanceof Error ? error.message : 'Error getting bridge transfer quote'
       );
     }
   }
@@ -253,7 +324,7 @@ class BridgeService {
     fromChain: string,
     toChain: string,
     amount: string,
-    _destinationAddress: string,
+    destinationAddress: string,
     signer: AddressOrPair,
     providerId: string
   ): Promise<string> {
@@ -267,18 +338,37 @@ class BridgeService {
         );
       }
 
-      // TODO: Implement actual bridge transfer logic
-      // This would involve:
-      // 1. For XCM: Use Polkadot.js API
-      // 2. For third-party bridges: Integrate with their SDKs/APIs
-      
-      const signerAddress = typeof signer === 'string' ? signer : signer.toString();
-      return `Bridge transfer initiated from ${fromChain} (${signerAddress}) to ${toChain} for ${amount} DOT using ${provider.name}`;
+      // Validate that the provider supports both chains
+      if (!provider.supportedChains.includes(fromChain) || !provider.supportedChains.includes(toChain)) {
+        throw new PolkadotHubError(
+          'Unsupported chain',
+          ErrorCodes.BRIDGE.ERROR,
+          'One or both of the selected chains are not supported by this provider'
+        );
+      }
+
+      if (provider.id === 'xcm') {
+        const transferTx = await this.getXcmTransferTx({
+          destChain: toChain,
+          destAddress: destinationAddress,
+          amount
+        });
+
+        const hash = await transferTx.signAndSend(signer);
+        return hash.toString();
+      }
+
+      // For third-party bridges, integrate with their SDKs here
+      throw new PolkadotHubError(
+        'Provider not implemented',
+        ErrorCodes.BRIDGE.ERROR,
+        `${provider.name} integration is not yet implemented`
+      );
     } catch (error) {
       throw new PolkadotHubError(
         'Failed to execute bridge transfer',
         ErrorCodes.BRIDGE.ERROR,
-        'Error executing bridge transfer'
+        error instanceof Error ? error.message : 'Error executing bridge transfer'
       );
     }
   }

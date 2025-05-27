@@ -4,9 +4,11 @@ import React from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
 import { Input } from '@/components/ui/Input';
-import { Select } from '@/components/ui/Select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { useToast } from '@/hooks/useToast';
 import { bridgeService, BridgeQuote } from '@/services/bridgeService';
+import { BridgeError } from '@/components/bridge/BridgeError';
+import { PolkadotHubError } from '@/utils/errorHandling';
 
 interface CrossChainSwapProps {
   bridgeId?: string | undefined;
@@ -19,6 +21,7 @@ export function CrossChainSwap({ bridgeId }: CrossChainSwapProps) {
   const [toChain, setToChain] = React.useState('');
   const [amount, setAmount] = React.useState('');
   const [quote, setQuote] = React.useState<BridgeQuote | null>(null);
+  const [error, setError] = React.useState<PolkadotHubError | null>(null);
 
   const chains = [
     { value: 'polkadot', label: 'Polkadot' },
@@ -42,14 +45,17 @@ export function CrossChainSwap({ bridgeId }: CrossChainSwapProps) {
 
     try {
       setIsLoading(true);
+      setError(null);
       const quoteResult = await bridgeService.getBridgeQuote(fromChain, toChain, amount, bridgeId);
       setQuote(quoteResult);
     } catch (error) {
-      showToast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to get quote',
-        variant: 'destructive'
-      });
+      const bridgeError = error instanceof PolkadotHubError ? error : new PolkadotHubError(
+        'Failed to get quote',
+        'BRIDGE_ERROR',
+        'Could not get a quote for the bridge transfer.'
+      );
+      setError(bridgeError);
+      setQuote(null);
     } finally {
       setIsLoading(false);
     }
@@ -67,19 +73,30 @@ export function CrossChainSwap({ bridgeId }: CrossChainSwapProps) {
 
     try {
       setIsLoading(true);
+      setError(null);
       // TODO: Implement actual swap execution
       showToast({
         title: 'Success',
         description: 'Swap initiated successfully',
       });
     } catch (error) {
-      showToast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to execute swap',
-        variant: 'destructive'
-      });
+      const bridgeError = error instanceof PolkadotHubError ? error : new PolkadotHubError(
+        'Failed to execute swap',
+        'BRIDGE_ERROR',
+        'Could not complete the bridge transfer.'
+      );
+      setError(bridgeError);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  const handleRetry = () => {
+    setError(null);
+    if (!quote) {
+      handleGetQuote();
+    } else {
+      handleSwap();
     }
   };
 
@@ -87,28 +104,44 @@ export function CrossChainSwap({ bridgeId }: CrossChainSwapProps) {
     <Card className="p-6">
       <h2 className="text-2xl font-bold mb-6">Cross-Chain Swap</h2>
       
+      {error && (
+        <div className="mb-6">
+          <BridgeError error={error} onRetry={handleRetry} />
+        </div>
+      )}
+
       <div className="space-y-4">
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label className="block text-sm font-medium mb-2">From Chain</label>
-            <Select
-              value={fromChain}
-              onValueChange={setFromChain}
-              items={chains}
-              placeholder="Select source chain"
-              disabled={isLoading}
-            />
+            <Select value={fromChain} onValueChange={setFromChain}>
+              <SelectTrigger disabled={isLoading}>
+                <SelectValue placeholder="Select source chain" />
+              </SelectTrigger>
+              <SelectContent>
+                {chains.map((chain) => (
+                  <SelectItem key={chain.value} value={chain.value}>
+                    {chain.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
           
           <div>
             <label className="block text-sm font-medium mb-2">To Chain</label>
-            <Select
-              value={toChain}
-              onValueChange={setToChain}
-              items={chains}
-              placeholder="Select destination chain"
-              disabled={isLoading}
-            />
+            <Select value={toChain} onValueChange={setToChain}>
+              <SelectTrigger disabled={isLoading}>
+                <SelectValue placeholder="Select destination chain" />
+              </SelectTrigger>
+              <SelectContent>
+                {chains.map((chain) => (
+                  <SelectItem key={chain.value} value={chain.value}>
+                    {chain.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
