@@ -1,6 +1,41 @@
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import { ProjectStats as EcosystemProjectStats } from '@/types/ecosystem';
 
+// Mock data for static build
+const STATIC_PROJECT_STATS: Record<string, EcosystemProjectStats> = {
+  'polkadot': {
+    tvl: 5000000000,
+    dailyActiveUsers: 50000,
+    totalTransactions: 1000000,
+    monthlyVolume: 750000000,
+    tokenPrice: 7.25,
+    marketCap: 9000000000
+  },
+  'acala': {
+    tvl: 120000000,
+    dailyActiveUsers: 25000,
+    totalTransactions: 150000,
+    monthlyVolume: 75000000,
+    tokenPrice: 0.25,
+    marketCap: 25000000
+  },
+  'moonbeam': {
+    tvl: 250000000,
+    dailyActiveUsers: 50000,
+    totalTransactions: 300000,
+    monthlyVolume: 150000000,
+    tokenPrice: 0.75,
+    marketCap: 75000000
+  },
+  'astar': {
+    tvl: 180000000,
+    dailyActiveUsers: 40000,
+    totalTransactions: 250000,
+    monthlyVolume: 120000000,
+    tokenPrice: 0.35,
+    marketCap: 45000000
+  }
+};
 
 // Add logger
 const LOG_PREFIX = '[ProjectStatsService]';
@@ -64,28 +99,15 @@ class ProjectStatsService {
     }
 
     try {
-      log.debug('Making API calls to fetch stats');
-      const [priceData, chainData] = await Promise.all([
-        fetch('/api/stats/coingecko?projectId=polkadot').then(res => res.json()),
-        fetch('/api/stats/defillama?projectId=polkadot').then(res => res.json())
-      ]);
-
-      const stats: EcosystemProjectStats = {
-        tvl: Number(chainData.tvl) || 0,
-        dailyActiveUsers: chainData.uniqueUsers24h || 0,
-        totalTransactions: chainData.monthlyTransactions || 0,
-        monthlyVolume: Number(priceData.volume24h) || 0,
-        tokenPrice: Number(priceData.price) || 0,
-        marketCap: Number(priceData.marketCap) || 0
+      // For static build, return Polkadot stats
+      return STATIC_PROJECT_STATS['polkadot'] || {
+        tvl: 0,
+        dailyActiveUsers: 0,
+        totalTransactions: 0,
+        monthlyVolume: 0,
+        tokenPrice: 0,
+        marketCap: 0
       };
-
-      this.lastStats = stats;
-      this.lastFetch = new Date();
-
-      log.info('Stats fetch completed successfully');
-      log.performance('getStats', startTime);
-
-      return stats;
     } catch (error) {
       log.error('Failed to fetch project stats', error);
       throw new PolkadotHubError(
@@ -96,9 +118,9 @@ class ProjectStatsService {
     }
   }
 
-  async getProjectStats(projectId: string, chainId: string): Promise<EcosystemProjectStats> {
+  async getProjectStats(projectId: string, _chainId: string): Promise<EcosystemProjectStats> {
     const startTime = Date.now();
-    log.info(`Fetching stats for project ${projectId} on chain ${chainId}`);
+    log.info(`Fetching stats for project ${projectId}`);
 
     try {
       const cachedData = this.getCachedData(`project_${projectId}`);
@@ -107,21 +129,14 @@ class ProjectStatsService {
         return cachedData;
       }
 
-      log.debug('Making API call to fetch project stats');
-      
-      // Use our internal API endpoints instead of direct external calls
-      const [priceData, chainData] = await Promise.all([
-        fetch(`/api/stats/coingecko?projectId=${projectId}`).then(res => res.json()),
-        fetch(`/api/stats/defillama?projectId=${projectId}&chainId=${chainId}`).then(res => res.json())
-      ]);
-
-      const stats: EcosystemProjectStats = {
-        tvl: Number(chainData.tvl) || 0,
-        dailyActiveUsers: chainData.uniqueUsers24h || 0,
-        totalTransactions: chainData.monthlyTransactions || 0,
-        monthlyVolume: Number(priceData.volume24h) || 0,
-        tokenPrice: Number(priceData.price) || 0,
-        marketCap: Number(priceData.marketCap) || 0
+      // For static build, return mock data
+      const stats = STATIC_PROJECT_STATS[projectId] || {
+        tvl: 0,
+        dailyActiveUsers: 0,
+        totalTransactions: 0,
+        monthlyVolume: 0,
+        tokenPrice: 0,
+        marketCap: 0
       };
 
       this.setCachedData(`project_${projectId}`, stats);
