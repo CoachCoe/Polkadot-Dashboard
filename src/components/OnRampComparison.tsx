@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { onRampService, type OnRampQuote } from '@/services/onRampService';
 import { Badge } from '@/components/ui/Badge';
-import { Select } from '@/components/ui/Select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 import { Input } from '@/components/ui/Input';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
@@ -85,21 +85,35 @@ export const OnRampComparison: React.FC<OnRampComparisonProps> = ({ onProviderSe
           <Select
             value={fiatCurrency}
             onValueChange={(value: string) => setFiatCurrency(value)}
-            items={fiatCurrencies.map(currency => ({
-              label: currency,
-              value: currency
-            }))}
-          />
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select currency" />
+            </SelectTrigger>
+            <SelectContent>
+              {fiatCurrencies.map(currency => (
+                <SelectItem key={currency} value={currency}>
+                  {currency}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
         <div>
           <Select
             value={cryptoCurrency}
             onValueChange={(value: string) => setCryptoCurrency(value)}
-            items={cryptoCurrencies.map(currency => ({
-              label: currency,
-              value: currency
-            }))}
-          />
+          >
+            <SelectTrigger>
+              <SelectValue placeholder="Select crypto" />
+            </SelectTrigger>
+            <SelectContent>
+              {cryptoCurrencies.map(currency => (
+                <SelectItem key={currency} value={currency}>
+                  {currency}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 

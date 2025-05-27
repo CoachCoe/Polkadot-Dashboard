@@ -3,206 +3,202 @@
 import React, { useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
 import { governanceService, type ReferendumInfo } from '@/services/governanceService';
+import { type Track } from '@/services/governance';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { ArrowPathIcon } from '@heroicons/react/24/outline';
-import { formatDistanceToNow } from 'date-fns';
+import { ReferendaFilters } from './ReferendaFilters';
+import { ReferendumComments } from './ReferendumComments';
+import { StarIcon as StarOutline } from '@heroicons/react/24/outline';
+import { StarIcon as StarSolid } from '@heroicons/react/24/solid';
+import { ChatBubbleLeftIcon } from '@heroicons/react/24/outline';
+import { formatDateTime, formatBalance } from '@/utils/formatters';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/Dialog';
 
-interface ReferendumListProps {
-  className?: string;
-}
-
-export function ReferendumList({ className }: ReferendumListProps) {
+export function ReferendumList() {
   const { selectedAccount } = useWalletStore();
   const [referenda, setReferenda] = useState<ReferendumInfo[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [voteAmount, setVoteAmount] = useState('');
-  const [conviction, setConviction] = useState(1);
+  const [isLoading, setIsLoading] = useState(true);
+  const [selectedReferendum, setSelectedReferendum] = useState<ReferendumInfo | null>(null);
+  const [showComments, setShowComments] = useState(false);
+  const [favorites, setFavorites] = useState<number[]>([]);
+  const [filters, setFilters] = useState({
+    status: 'all',
+    track: 'all',
+    favorites: false
+  });
+  const [tracks, setTracks] = useState<Track[]>([]);
+  const [sortBy, setSortBy] = useState<'newest' | 'oldest' | 'most-votes' | 'highest-turnout'>('newest');
 
   useEffect(() => {
-    void loadReferenda();
-    let unsubscribe: (() => void) | undefined;
+    loadReferenda();
+    loadFavorites();
+    loadTracks();
+  }, [selectedAccount, filters]);
 
-    const setupSubscription = async () => {
-      unsubscribe = await governanceService.subscribeToReferendumUpdates(
-        (updatedReferenda) => setReferenda(updatedReferenda)
-      );
-    };
+  async function loadTracks() {
+    try {
+      const tracksData = await governanceService.getTracks();
+      setTracks(tracksData);
+    } catch (error) {
+      console.error('Failed to load tracks:', error);
+    }
+  }
 
-    void setupSubscription();
-
-    return () => {
-      if (unsubscribe) {
-        unsubscribe();
-      }
-    };
-  }, []);
-
-  const loadReferenda = async () => {
+  async function loadReferenda() {
     try {
       setIsLoading(true);
-      setError(null);
-      const data = await governanceService.getReferenda();
+      const data = await governanceService.getReferenda(filters);
       setReferenda(data);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to load referenda');
+    } catch (error) {
+      console.error('Failed to load referenda:', error);
     } finally {
       setIsLoading(false);
     }
-  };
+  }
 
-  const handleVote = async (referendumIndex: number, isAye: boolean) => {
-    if (!selectedAccount || !voteAmount) return;
-
+  async function loadFavorites() {
+    if (!selectedAccount) return;
     try {
-      setError(null);
-      await governanceService.vote(
-        selectedAccount.address,
-        referendumIndex,
-        isAye,
-        conviction,
-        voteAmount
-      );
-      void loadReferenda();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to submit vote');
+      const favs = await governanceService.getFavoriteReferenda(selectedAccount.address);
+      setFavorites(favs);
+    } catch (error) {
+      console.error('Failed to load favorites:', error);
     }
-  };
+  }
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'Passed':
-        return 'text-green-600 bg-green-50';
-      case 'Rejected':
-        return 'text-red-600 bg-red-50';
-      case 'Cancelled':
-        return 'text-gray-600 bg-gray-50';
-      default:
-        return 'text-yellow-600 bg-yellow-50';
+  async function toggleFavorite(referendumId: number) {
+    if (!selectedAccount) return;
+    try {
+      if (favorites.includes(referendumId)) {
+        await governanceService.removeFavoriteReferendum(selectedAccount.address, referendumId);
+        setFavorites(favorites.filter(id => id !== referendumId));
+      } else {
+        await governanceService.addFavoriteReferendum(selectedAccount.address, referendumId);
+        setFavorites([...favorites, referendumId]);
+      }
+    } catch (error) {
+      console.error('Failed to update favorite:', error);
     }
-  };
+  }
+
+  function getStatusColor(status: ReferendumInfo['status']) {
+    switch (status) {
+      case 'active':
+        return 'bg-blue-100 text-blue-800';
+      case 'passed':
+        return 'bg-green-100 text-green-800';
+      case 'rejected':
+        return 'bg-red-100 text-red-800';
+      case 'cancelled':
+        return 'bg-gray-100 text-gray-800';
+      default:
+        return 'bg-gray-100 text-gray-800';
+    }
+  }
+
+  if (isLoading) {
+    return (
+      <div className="space-y-4">
+        {[...Array(3)].map((_, i) => (
+          <Card key={i} className="p-6 animate-pulse">
+            <div className="h-4 bg-gray-200 rounded w-1/4 mb-4" />
+            <div className="h-4 bg-gray-200 rounded w-3/4" />
+          </Card>
+        ))}
+      </div>
+    );
+  }
 
   return (
-    <div className={className}>
-      <div className="flex justify-between items-center mb-6">
-        <h2 className="text-2xl font-semibold">Active Referenda</h2>
-        <Button
-          onClick={() => void loadReferenda()}
-          variant="outline"
-          className="flex items-center gap-2"
-          disabled={isLoading}
-        >
-          <ArrowPathIcon className={`h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
-        </Button>
+    <>
+      <div className="mb-6">
+        <ReferendaFilters
+          tracks={tracks}
+          selectedTrackId={filters.track === 'all' ? undefined : Number(filters.track)}
+          selectedStatus={filters.status as 'all' | 'active' | 'completed'}
+          sortBy={sortBy}
+          onTrackChange={(trackId) => setFilters({ ...filters, track: trackId ? String(trackId) : 'all' })}
+          onStatusChange={(status) => setFilters({ ...filters, status })}
+          onSortChange={setSortBy}
+          filters={filters}
+          onChange={setFilters}
+          showFavoritesFilter={favorites.length > 0}
+        />
       </div>
-
-      {error && (
-        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-sm text-red-600">{error}</p>
-        </div>
-      )}
 
       <div className="space-y-4">
         {referenda.map((referendum) => (
-          <Card key={referendum.index} className="p-6">
-            <div className="flex justify-between items-start mb-4">
-              <div>
-                <h3 className="text-lg font-medium">{referendum.title}</h3>
-                <p className="text-sm text-gray-500 mt-1">
-                  Proposed by: {referendum.proposer.slice(0, 6)}...{referendum.proposer.slice(-4)}
-                </p>
-              </div>
-              <span
-                className={`px-3 py-1 rounded-full text-sm font-medium ${getStatusColor(
-                  referendum.status
-                )}`}
-              >
-                {referendum.status}
-              </span>
-            </div>
-
-            <p className="text-gray-700 mb-4">{referendum.description}</p>
-
-            <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-              <div>
-                <p className="text-gray-500">Ayes</p>
-                <p className="font-medium">{referendum.voteCount.ayes} DOT</p>
-              </div>
-              <div>
-                <p className="text-gray-500">Nays</p>
-                <p className="font-medium">{referendum.voteCount.nays} DOT</p>
-              </div>
-            </div>
-
-            <div className="flex items-center justify-between text-sm text-gray-500">
-              <p>
-                Ends {formatDistanceToNow(referendum.end, { addSuffix: true })}
-              </p>
-              <p>Threshold: {referendum.threshold}</p>
-            </div>
-
-            {referendum.status === 'Ongoing' && selectedAccount && (
-              <div className="mt-4 pt-4 border-t">
-                <div className="flex gap-4 mb-4">
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Amount (DOT)
-                    </label>
-                    <input
-                      type="number"
-                      value={voteAmount}
-                      onChange={(e) => setVoteAmount(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-md"
-                      placeholder="0.0"
-                    />
+          <Card key={referendum.id} className="p-6">
+            <div className="flex justify-between items-start">
+              <div className="flex-1">
+                <div className="flex items-center space-x-4">
+                  <h3 className="text-lg font-semibold">#{referendum.id} {referendum.title}</h3>
+                  <span className={`px-2 py-1 rounded-full text-sm ${getStatusColor(referendum.status)}`}>
+                    {referendum.status}
+                  </span>
+                  <span className="text-sm text-gray-500">{referendum.track}</span>
+                </div>
+                <p className="mt-2 text-gray-600 line-clamp-2">{referendum.description}</p>
+                <div className="mt-4 grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <div>
+                    <p className="text-sm text-gray-500">Turnout</p>
+                    <p className="font-medium">{formatBalance(referendum.turnout)} DOT</p>
                   </div>
-                  <div className="flex-1">
-                    <label className="block text-sm font-medium text-gray-700 mb-1">
-                      Conviction
-                    </label>
-                    <select
-                      value={conviction}
-                      onChange={(e) => setConviction(Number(e.target.value))}
-                      className="w-full px-3 py-2 border rounded-md"
-                    >
-                      {[1, 2, 3, 4, 5, 6].map((value) => (
-                        <option key={value} value={value}>
-                          {value}x voting power ({value * 6} month lock)
-                        </option>
-                      ))}
-                    </select>
+                  <div>
+                    <p className="text-sm text-gray-500">Ayes</p>
+                    <p className="font-medium text-green-600">{formatBalance(referendum.ayes)} DOT</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">Nays</p>
+                    <p className="font-medium text-red-600">{formatBalance(referendum.nays)} DOT</p>
+                  </div>
+                  <div>
+                    <p className="text-sm text-gray-500">End Date</p>
+                    <p className="font-medium">{formatDateTime(referendum.voteEnd)}</p>
                   </div>
                 </div>
-
-                <div className="flex gap-4">
-                  <Button
-                    onClick={() => void handleVote(referendum.index, true)}
-                    className="flex-1 bg-green-600 hover:bg-green-700 text-white"
-                    disabled={!voteAmount || isLoading}
-                  >
-                    Vote Aye
-                  </Button>
-                  <Button
-                    onClick={() => void handleVote(referendum.index, false)}
-                    className="flex-1 bg-red-600 hover:bg-red-700 text-white"
-                    disabled={!voteAmount || isLoading}
-                  >
-                    Vote Nay
-                  </Button>
-                </div>
               </div>
-            )}
+              <div className="flex items-center space-x-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => toggleFavorite(referendum.id)}
+                  className={favorites.includes(referendum.id) ? 'text-yellow-500' : 'text-gray-400'}
+                >
+                  {favorites.includes(referendum.id) ? (
+                    <StarSolid className="h-5 w-5" />
+                  ) : (
+                    <StarOutline className="h-5 w-5" />
+                  )}
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => {
+                    setSelectedReferendum(referendum);
+                    setShowComments(true);
+                  }}
+                >
+                  <ChatBubbleLeftIcon className="h-5 w-5 text-gray-400" />
+                </Button>
+              </div>
+            </div>
           </Card>
         ))}
-
-        {referenda.length === 0 && !isLoading && (
-          <div className="text-center py-12 text-gray-500">
-            No active referenda at the moment
-          </div>
-        )}
       </div>
-    </div>
+
+      <Dialog open={showComments} onOpenChange={setShowComments}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>
+              {selectedReferendum && `Comments on Referendum #${selectedReferendum.id}`}
+            </DialogTitle>
+          </DialogHeader>
+          {selectedReferendum && (
+            <ReferendumComments referendumId={selectedReferendum.id} />
+          )}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 } 

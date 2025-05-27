@@ -1,127 +1,166 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
-import { useSession } from 'next-auth/react';
-import { useToast } from '@/hooks/useToast';
-import { Button } from '@/components/ui/Button';
+import * as React from 'react';
 import { Card } from '@/components/ui/Card';
-import { formatDistanceToNow } from 'date-fns';
-import { governanceService, VoteHistory } from '@/services/governance';
+import { Label } from '@/components/ui/Label';
+import { LoadingState } from '@/components/ui/LoadingState';
+import { ErrorMessage } from '@/components/ui/ErrorMessage';
+import { governanceService, type DelegationInfo } from '@/services/governanceService';
 
-interface VotingHistoryProps {
-  address?: string | undefined;
+interface VotingStats {
+  totalVotes: number;
+  ayeVotes: number;
+  nayVotes: number;
+  averageConviction: number;
+  totalValue: string;
+  recentActivity: {
+    date: string;
+    votes: number;
+  }[];
 }
 
-export function VotingHistory({ address }: VotingHistoryProps) {
-  const { data: session } = useSession();
-  const { showToast } = useToast();
-  const [votes, setVotes] = useState<VoteHistory[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [filter, setFilter] = useState<'all' | 'active' | 'completed'>('all');
+interface ActivityItem {
+  date: string;
+  votes: number;
+}
 
-  useEffect(() => {
-    const userAddress = address || session?.user?.address;
-    if (userAddress) {
-      loadVotingHistory(userAddress);
-    }
-  }, [address, session?.user?.address]);
+export function VotingHistory({ address }: { address: string }) {
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [history, setHistory] = React.useState<DelegationInfo[]>([]);
+  const [stats, setStats] = React.useState<VotingStats | null>(null);
 
-  const loadVotingHistory = async (userAddress: string) => {
+  const fetchHistory = React.useCallback(async () => {
     try {
-      setIsLoading(true);
-      const history = await governanceService.getVotingHistory(userAddress);
-      setVotes(history);
-    } catch (error) {
-      showToast({
-        title: 'Error',
-        description: 'Failed to load voting history. Please try again.',
-        variant: 'destructive'
-      });
+      setLoading(true);
+      setError(null);
+      
+      // Fetch delegation history from the service
+      const delegations = await governanceService.getDelegationHistory(address);
+      setHistory(delegations);
+
+      if (delegations.length > 0) {
+        // Calculate statistics
+        const totalVotes = delegations.length;
+        const totalValue = delegations.reduce((acc, d) => acc + parseFloat(d.balance), 0).toString();
+
+        // Group delegations by date for recent activity
+        const recentActivity = delegations
+          .reduce((acc: ActivityItem[], delegation) => {
+            const date = new Date(delegation.timestamp).toLocaleDateString();
+            const existing = acc.find(a => a.date === date);
+            if (existing) {
+              existing.votes += 1;
+            } else {
+              acc.push({ date, votes: 1 });
+            }
+            return acc;
+          }, [] as ActivityItem[])
+          .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime())
+          .slice(0, 7);
+
+        setStats({
+          totalVotes,
+          ayeVotes: 0, // Not applicable for delegations
+          nayVotes: 0, // Not applicable for delegations
+          averageConviction: 0, // Not applicable for delegations
+          totalValue,
+          recentActivity
+        });
+      } else {
+        setStats(null);
+      }
+    } catch (err) {
+      setError('Failed to load delegation history. Please try again.');
+      console.error('Error loading delegation history:', err);
     } finally {
-      setIsLoading(false);
+      setLoading(false);
     }
-  };
+  }, [address]);
 
-  const filteredVotes = votes.filter(
-    (vote) => filter === 'all' || vote.status === filter
-  );
+  React.useEffect(() => {
+    void fetchHistory();
+  }, [fetchHistory]);
 
-  const renderVote = (vote: VoteHistory) => (
-    <Card key={vote.referendumIndex} className="p-4 mb-4">
-      <div className="flex items-start justify-between">
-        <div>
-          <h3 className="text-lg font-semibold">{vote.title}</h3>
-          <p className="text-sm text-gray-500 mt-1">
-            Referendum #{vote.referendumIndex} • Status: {vote.status}
-          </p>
-          <p className="text-sm text-gray-500">
-            Voted {formatDistanceToNow(vote.timestamp, { addSuffix: true })}
-          </p>
-        </div>
-        <div className="flex items-center space-x-2">
-          <span
-            className={`px-3 py-1 rounded-full text-sm font-medium ${
-              vote.vote === 'aye'
-                ? 'bg-green-100 text-green-800'
-                : 'bg-red-100 text-red-800'
-            }`}
-          >
-            {vote.vote.toUpperCase()}
-          </span>
-          <span className="text-sm text-gray-500">{vote.amount} DOT</span>
-        </div>
-      </div>
-    </Card>
-  );
+  if (loading) {
+    return <LoadingState text="Loading delegation history..." />;
+  }
 
-  if (!address && !session?.user?.address) {
+  if (error) {
     return (
-      <Card className="p-4 text-center">
-        <p>Please connect your wallet to view voting history.</p>
+      <ErrorMessage
+        title="Error Loading History"
+        message={error}
+        action={{
+          label: 'Try Again',
+          onClick: () => {
+            void fetchHistory();
+          }
+        }}
+      />
+    );
+  }
+
+  if (!stats || history.length === 0) {
+    return (
+      <Card className="p-6">
+        <p className="text-center text-muted-foreground">No delegation history found.</p>
       </Card>
     );
   }
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold">Voting History</h2>
-        <div className="flex items-center space-x-2">
-          <Button
-            variant={filter === 'all' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('all')}
-          >
-            All
-          </Button>
-          <Button
-            variant={filter === 'active' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('active')}
-          >
-            Active
-          </Button>
-          <Button
-            variant={filter === 'completed' ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => setFilter('completed')}
-          >
-            Completed
-          </Button>
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4">Delegation Overview</h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <Label className="mb-1">Total Delegations</Label>
+            <p className="text-2xl font-bold">{stats.totalVotes}</p>
+          </div>
+          <div>
+            <Label className="mb-1">Total Value Delegated</Label>
+            <p className="text-2xl font-bold">{parseFloat(stats.totalValue).toFixed(2)} DOT</p>
+          </div>
         </div>
-      </div>
+      </Card>
 
-      {isLoading ? (
-        <div className="text-center py-8">Loading voting history...</div>
-      ) : filteredVotes.length > 0 ? (
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4">Recent Activity</h3>
         <div className="space-y-4">
-          {filteredVotes.map(renderVote)}
+          {stats.recentActivity.map((activity) => (
+            <div
+              key={activity.date}
+              className="flex items-center justify-between py-2 border-b last:border-0"
+            >
+              <span>{activity.date}</span>
+              <span className="font-medium">{activity.votes} delegations</span>
+            </div>
+          ))}
         </div>
-      ) : (
-        <Card className="p-4 text-center">
-          <p>No voting history found for this address.</p>
-        </Card>
-      )}
+      </Card>
+
+      <Card className="p-6">
+        <h3 className="text-lg font-semibold mb-4">Delegation History</h3>
+        <div className="space-y-4">
+          {history.map((delegation) => (
+            <div
+              key={`${delegation.target}-${delegation.timestamp}`}
+              className="flex items-center justify-between py-2 border-b last:border-0"
+            >
+              <div>
+                <span className="font-medium">Delegated to {delegation.target}</span>
+                <div className="text-sm text-muted-foreground">
+                  Track {delegation.track} • {new Date(delegation.timestamp).toLocaleDateString()}
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="font-medium">{parseFloat(delegation.balance).toFixed(2)} DOT</span>
+              </div>
+            </div>
+          ))}
+        </div>
+      </Card>
     </div>
   );
 } 

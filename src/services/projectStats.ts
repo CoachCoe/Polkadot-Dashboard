@@ -1,6 +1,15 @@
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import { ProjectStats as EcosystemProjectStats } from '@/types/ecosystem';
 
+const DEFAULT_STATS: EcosystemProjectStats = {
+  tvl: 0,
+  dailyActiveUsers: 0,
+  totalTransactions: 0,
+  monthlyVolume: 0,
+  tokenPrice: 0,
+  marketCap: 0
+};
+
 // Mock data for static build
 const STATIC_PROJECT_STATS: Record<string, EcosystemProjectStats> = {
   'polkadot': {
@@ -40,27 +49,49 @@ const STATIC_PROJECT_STATS: Record<string, EcosystemProjectStats> = {
 // Add logger
 const LOG_PREFIX = '[ProjectStatsService]';
 const log = {
-  info: (message: string, ...args: any[]) => console.log(`${LOG_PREFIX} ${message}`, ...args),
-  error: (message: string, error?: any) => console.error(`${LOG_PREFIX} ${message}`, error || ''),
-  warn: (message: string, ...args: any[]) => console.warn(`${LOG_PREFIX} ${message}`, ...args),
-  debug: (message: string, ...args: any[]) => console.debug(`${LOG_PREFIX} ${message}`, ...args),
+  info: (message: string, ...args: any[]) => {
+    if (typeof window !== 'undefined') {
+      console.log(`${LOG_PREFIX} ${message}`, ...args);
+    }
+  },
+  error: (message: string, error?: any) => {
+    if (typeof window !== 'undefined') {
+      console.error(`${LOG_PREFIX} ${message}`, error || '');
+    }
+  },
+  warn: (message: string, ...args: any[]) => {
+    if (typeof window !== 'undefined') {
+      console.warn(`${LOG_PREFIX} ${message}`, ...args);
+    }
+  },
+  debug: (message: string, ...args: any[]) => {
+    if (typeof window !== 'undefined') {
+      console.debug(`${LOG_PREFIX} ${message}`, ...args);
+    }
+  },
   performance: (operation: string, startTime: number) => {
-    const duration = Date.now() - startTime;
-    console.log(`${LOG_PREFIX} Performance - ${operation}: ${duration}ms`);
+    if (typeof window !== 'undefined') {
+      const duration = Date.now() - startTime;
+      console.log(`${LOG_PREFIX} Performance - ${operation}: ${duration}ms`);
+    }
   }
 };
 
 const cache = new Map<string, { data: any; timestamp: number }>();
-const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const CACHE_TTL = 5 * 60 * 1000;
 
 class ProjectStatsService {
   private static instance: ProjectStatsService;
   private lastStats: EcosystemProjectStats | null = null;
   private lastFetch: Date | null = null;
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+  private isServer: boolean;
   
   private constructor() {
-    log.info('Initializing ProjectStatsService');
+    this.isServer = typeof window === 'undefined';
+    if (!this.isServer) {
+      log.info('Initializing ProjectStatsService');
+    }
   }
 
   static getInstance(): ProjectStatsService {
@@ -71,6 +102,10 @@ class ProjectStatsService {
   }
 
   private getCachedData(key: string) {
+    if (this.isServer) {
+      return null;
+    }
+
     const cached = cache.get(key);
     if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
       log.debug(`Cache hit for key: ${key}`);
@@ -81,11 +116,17 @@ class ProjectStatsService {
   }
 
   private setCachedData(key: string, data: any) {
-    log.debug(`Caching data for key: ${key}`);
-    cache.set(key, { data, timestamp: Date.now() });
+    if (!this.isServer) {
+      log.debug(`Caching data for key: ${key}`);
+      cache.set(key, { data, timestamp: Date.now() });
+    }
   }
 
   async getStats(): Promise<EcosystemProjectStats> {
+    if (this.isServer) {
+      return STATIC_PROJECT_STATS['polkadot'] || DEFAULT_STATS;
+    }
+
     log.info('Fetching project stats');
 
     if (this.lastStats && this.lastFetch) {
@@ -99,14 +140,7 @@ class ProjectStatsService {
 
     try {
       // For static build, return Polkadot stats
-      const stats = STATIC_PROJECT_STATS['polkadot'] || {
-        tvl: 0,
-        dailyActiveUsers: 0,
-        totalTransactions: 0,
-        monthlyVolume: 0,
-        tokenPrice: 0,
-        marketCap: 0
-      };
+      const stats = STATIC_PROJECT_STATS['polkadot'] || DEFAULT_STATS;
 
       this.lastStats = stats;
       this.lastFetch = new Date();
@@ -124,6 +158,10 @@ class ProjectStatsService {
   }
 
   async getProjectStats(projectId: string, _chainId: string): Promise<EcosystemProjectStats> {
+    if (this.isServer) {
+      return STATIC_PROJECT_STATS[projectId] || DEFAULT_STATS;
+    }
+
     log.info(`Fetching stats for project ${projectId}`);
 
     try {
@@ -134,14 +172,7 @@ class ProjectStatsService {
       }
 
       // For static build, return mock data
-      const stats = STATIC_PROJECT_STATS[projectId] || {
-        tvl: 0,
-        dailyActiveUsers: 0,
-        totalTransactions: 0,
-        monthlyVolume: 0,
-        tokenPrice: 0,
-        marketCap: 0
-      };
+      const stats = STATIC_PROJECT_STATS[projectId] || DEFAULT_STATS;
 
       this.setCachedData(`project_${projectId}`, stats);
       log.info('Project stats fetch completed successfully');

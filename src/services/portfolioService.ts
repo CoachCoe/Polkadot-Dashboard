@@ -40,6 +40,13 @@ export interface PortfolioStats {
     assetHub: number;
     parachains: number;
   };
+  balanceDetails: {
+    available: string;
+    locked: string;
+    bonded: string;
+    unbonding: string;
+    democracy: string;
+  };
 }
 
 export interface ChainBalance {
@@ -224,37 +231,47 @@ class PortfolioService {
 
   async getPortfolioStats(address: string): Promise<PortfolioStats> {
     try {
-      if (!this.api?.query?.system?.account) {
-        throw new PolkadotHubError(
-          'API not initialized',
-          ErrorCodes.API.ERROR,
-          'Please try again in a few moments.'
-        );
-      }
-
-      // Get balances from different chains
-      const [relayBalance, assetHubBalance, parachainBalances] = await Promise.all([
-        this.api.query.system.account(address),
+      const [balance, assetHubBalance, parachainBalances] = await Promise.all([
+        this.getBalance(address),
         this.getAssetHubBalance(address),
         this.getParachainBalances(address)
       ]);
 
-      const total = (relayBalance as any).data.free.add(assetHubBalance).add(parachainBalances);
-      const formattedTotal = formatBalance(total, { withUnit: false });
+      const total = BigInt(balance.total);
+      const assetHub = assetHubBalance;
+      const parachains = parachainBalances;
 
-      // For demo purposes, using static data for 24h changes
+      const relayChainPercentage = Number((BigInt(100) * total) / (total + assetHub + parachains));
+      const assetHubPercentage = Number((BigInt(100) * assetHub) / (total + assetHub + parachains));
+      const parachainsPercentage = Number((BigInt(100) * parachains) / (total + assetHub + parachains));
+
+      // Mock 24h change data for now
+      // TODO: Implement real price change tracking
+      const mockChange = Math.random() * 10 - 5; // Random number between -5 and 5
+
       return {
-        totalBalance: formattedTotal,
-        change24h: 0.5,
-        changePercentage24h: 2.5,
+        totalBalance: balance.total,
+        change24h: mockChange,
+        changePercentage24h: mockChange,
         distribution: {
-          relayChain: 60,
-          assetHub: 30,
-          parachains: 10
+          relayChain: relayChainPercentage,
+          assetHub: assetHubPercentage,
+          parachains: parachainsPercentage
+        },
+        balanceDetails: {
+          available: balance.available,
+          locked: balance.locked,
+          bonded: balance.bonded,
+          unbonding: balance.unbonding,
+          democracy: balance.democracy
         }
       };
     } catch (error) {
-      throw this.handleError(error);
+      throw new PolkadotHubError(
+        'Failed to fetch portfolio stats',
+        ErrorCodes.API.REQUEST_FAILED,
+        'Could not load portfolio statistics. Please try again.'
+      );
     }
   }
 

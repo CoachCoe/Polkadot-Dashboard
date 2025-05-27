@@ -1,7 +1,7 @@
 'use client';
 
 import { ProjectSortOptions } from '@/types/ecosystem';
-import { Select } from '@/components/ui/Select';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 
 interface ProjectSortProps {
   currentSort: ProjectSortOptions;
@@ -29,18 +29,35 @@ export function ProjectSort({ currentSort, onChange }: ProjectSortProps) {
     <div className="flex gap-2">
       <Select
         value={currentSort.field}
-        onValueChange={(value) => 
-          onChange({ ...currentSort, field: value as SortField })
-        }
-        items={sortOptions}
-      />
+        onValueChange={(value) => onChange({ ...currentSort, field: value as SortField })}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="Sort by" />
+        </SelectTrigger>
+        <SelectContent>
+          {sortOptions.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      
       <Select
         value={currentSort.direction}
-        onValueChange={(value) => 
-          onChange({ ...currentSort, direction: value as SortDirection })
-        }
-        items={directionOptions}
-      />
+        onValueChange={(value) => onChange({ ...currentSort, direction: value as SortDirection })}
+      >
+        <SelectTrigger>
+          <SelectValue placeholder="Direction" />
+        </SelectTrigger>
+        <SelectContent>
+          {directionOptions.map((option) => (
+            <SelectItem key={option.value} value={option.value}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   );
 } 

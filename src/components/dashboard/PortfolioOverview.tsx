@@ -6,6 +6,8 @@ import { useWalletStore } from '@/store/useWalletStore';
 import { portfolioService } from '@/services/portfolioService';
 import { ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/24/solid';
 import { Skeleton } from '@/components/ui/Skeleton';
+import { formatBalance } from '@/utils/formatters';
+import Link from 'next/link';
 
 interface PortfolioStats {
   totalBalance: string;
@@ -15,6 +17,13 @@ interface PortfolioStats {
     relayChain: number;
     assetHub: number;
     parachains: number;
+  };
+  balanceDetails: {
+    available: string;
+    locked: string;
+    bonded: string;
+    unbonding: string;
+    democracy: string;
   };
 }
 
@@ -61,27 +70,54 @@ export function PortfolioOverview() {
 
   return (
     <Card className="p-6">
-      <h2 className="text-2xl font-bold mb-4">Portfolio Overview</h2>
-      
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      <div className="flex justify-between items-start mb-6">
         <div>
-          <p className="text-sm text-gray-500">Total Balance</p>
-          <p className="text-3xl font-bold">{stats.totalBalance} DOT</p>
-          
-          <div className="flex items-center mt-2">
-            <span className={`flex items-center ${stats.change24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
-              {stats.change24h >= 0 ? (
-                <ArrowUpIcon className="w-4 h-4 mr-1" />
-              ) : (
-                <ArrowDownIcon className="w-4 h-4 mr-1" />
-              )}
-              {Math.abs(stats.changePercentage24h).toFixed(2)}%
-            </span>
-            <span className="text-gray-500 ml-2">24h change</span>
+          <h2 className="text-2xl font-bold">Portfolio Overview</h2>
+          <div className="mt-2">
+            <p className="text-3xl font-bold">{stats.totalBalance} DOT</p>
+            <div className="flex items-center mt-2">
+              <span className={`flex items-center ${stats.change24h >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+                {stats.change24h >= 0 ? (
+                  <ArrowUpIcon className="w-4 h-4 mr-1" />
+                ) : (
+                  <ArrowDownIcon className="w-4 h-4 mr-1" />
+                )}
+                {Math.abs(stats.changePercentage24h).toFixed(2)}%
+              </span>
+              <span className="text-gray-500 ml-2">24h change</span>
+            </div>
           </div>
+        </div>
+        <Link
+          href="https://polkadot.subscan.io/account/${selectedAccount?.address}"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-sm text-blue-600 hover:text-blue-800"
+        >
+          View on Explorer →
+        </Link>
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+        <div className="bg-gray-50 rounded-lg p-4">
+          <h3 className="text-sm text-gray-500">Available</h3>
+          <p className="text-lg font-semibold mt-1">{formatBalance(stats.balanceDetails.available)} DOT</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-4">
+          <h3 className="text-sm text-gray-500">Staked</h3>
+          <p className="text-lg font-semibold mt-1">{formatBalance(stats.balanceDetails.bonded)} DOT</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-4">
+          <h3 className="text-sm text-gray-500">Unbonding</h3>
+          <p className="text-lg font-semibold mt-1">{formatBalance(stats.balanceDetails.unbonding)} DOT</p>
+        </div>
+        <div className="bg-gray-50 rounded-lg p-4">
+          <h3 className="text-sm text-gray-500">Democracy Locked</h3>
+          <p className="text-lg font-semibold mt-1">{formatBalance(stats.balanceDetails.democracy)} DOT</p>
         </div>
       </div>
 
+      <h3 className="text-lg font-semibold mb-4">Distribution</h3>
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-gray-50 rounded-lg p-4">
           <h3 className="text-sm text-gray-500">Relay Chain</h3>

@@ -198,6 +198,21 @@ export const ErrorCodes = {
     UNSUPPORTED_REGION: 'ONRAMP_UNSUPPORTED_REGION' as const,
     PAYMENT_FAILED: 'ONRAMP_PAYMENT_FAILED' as const,
     KYC_REQUIRED: 'ONRAMP_KYC_REQUIRED' as const
+  },
+
+  // Security errors
+  SECURITY: {
+    RATE_LIMIT_EXCEEDED: 'RATE_LIMIT_EXCEEDED' as const,
+    ACCOUNT_LOCKED: 'ACCOUNT_LOCKED' as const,
+    INVALID_SIGNATURE: 'INVALID_SIGNATURE' as const,
+    SUSPICIOUS_ACTIVITY: 'SUSPICIOUS_ACTIVITY' as const,
+    INVALID_TOKEN: 'INVALID_TOKEN' as const,
+    SESSION_EXPIRED: 'SESSION_EXPIRED' as const,
+    IP_BLOCKED: 'IP_BLOCKED' as const,
+    UNAUTHORIZED_ACCESS: 'UNAUTHORIZED_ACCESS' as const,
+    ENCRYPTION_FAILED: 'ENCRYPTION_FAILED' as const,
+    DECRYPTION_FAILED: 'DECRYPTION_FAILED' as const,
+    DATA_EXPIRED: 'DATA_EXPIRED' as const
   }
 } as const;
 
@@ -379,7 +394,20 @@ const SAFE_ERROR_MESSAGES: Record<ErrorCode, string> = {
   // Staking errors
   'STAKING_NOMINATION_FAILED': 'Failed to submit nomination.',
   'STAKING_UNBONDING_FAILED': 'Unbonding failed',
-  'STAKING_WITHDRAWAL_FAILED': 'Withdrawal failed'
+  'STAKING_WITHDRAWAL_FAILED': 'Withdrawal failed',
+
+  // Security errors
+  'RATE_LIMIT_EXCEEDED': 'Rate limit exceeded',
+  'ACCOUNT_LOCKED': 'Account locked',
+  'INVALID_SIGNATURE': 'Invalid signature',
+  'SUSPICIOUS_ACTIVITY': 'Suspicious activity',
+  'INVALID_TOKEN': 'Invalid token',
+  'SESSION_EXPIRED': 'Session expired',
+  'IP_BLOCKED': 'IP blocked',
+  'UNAUTHORIZED_ACCESS': 'Unauthorized access',
+  'ENCRYPTION_FAILED': 'Failed to encrypt data',
+  'DECRYPTION_FAILED': 'Failed to decrypt data',
+  'DATA_EXPIRED': 'Data has expired'
 };
 
 export class PolkadotHubError extends Error {

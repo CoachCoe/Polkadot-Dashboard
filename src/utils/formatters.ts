@@ -1,14 +1,19 @@
-export function formatNumber(value: number): string {
-  if (value >= 1_000_000_000) {
-    return `${(value / 1_000_000_000).toFixed(1)}B`;
-  }
-  if (value >= 1_000_000) {
-    return `${(value / 1_000_000).toFixed(1)}M`;
-  }
-  if (value >= 1_000) {
-    return `${(value / 1_000).toFixed(1)}K`;
-  }
-  return value.toLocaleString();
+import { formatBalance as polkadotFormatBalance } from '@polkadot/util';
+
+export function formatNumber(value: number | string): string {
+  const num = typeof value === 'string' ? parseFloat(value) : value;
+  return new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 2,
+  }).format(num);
+}
+
+export function formatBalance(value: string | number, options: { withUnit?: boolean } = {}): string {
+  const { withUnit = true } = options;
+  return polkadotFormatBalance(value, {
+    withUnit,
+    decimals: 10,
+    forceUnit: '-',
+  });
 }
 
 export function formatCurrency(value: number, currency: string = 'USD'): string {
@@ -21,14 +26,25 @@ export function formatCurrency(value: number, currency: string = 'USD'): string 
 }
 
 export function formatPercentage(value: number): string {
-  return `${value.toFixed(2)}%`;
+  return `${(value * 100).toFixed(2)}%`;
 }
 
-export function formatDate(date: string | Date): string {
-  return new Date(date).toLocaleDateString('en-US', {
+export function formatDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString('en-US', {
     year: 'numeric',
-    month: 'long',
-    day: 'numeric'
+    month: 'short',
+    day: 'numeric',
+  });
+}
+
+export function formatDateTime(timestamp: number | string | Date): string {
+  const date = typeof timestamp === 'number' ? new Date(timestamp) : new Date(timestamp);
+  return date.toLocaleString('en-US', {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
   });
 }
 

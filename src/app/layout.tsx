@@ -5,6 +5,7 @@ import './globals.css'
 import { Providers } from './providers'
 import { Navbar } from '@/components/navigation/Navbar'
 import ClientOnly from '@/components/ClientOnly'
+import { Analytics } from '@vercel/analytics/react'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -52,6 +53,7 @@ export default async function RootLayout({
             </footer>
           </Providers>
         </ClientOnly>
+        <Analytics />
       </body>
     </html>
   )

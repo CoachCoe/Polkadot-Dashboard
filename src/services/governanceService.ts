@@ -2,20 +2,11 @@ import { polkadotService } from './polkadot';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import type { AddressOrPair } from '@polkadot/api/types';
 import { websocketService } from './websocketService';
-
-interface ReferendumInfoJson {
-  title?: string;
-  description?: string;
-  proposer?: string;
-  status?: string;
-  ended?: boolean;
-  tally?: {
-    ayes?: string | number;
-    nays?: string | number;
-  };
-  threshold?: string;
-  end?: number;
-}
+import { securityAuditService } from './securityAuditService';
+import { transactionConfirmationService } from './transactionConfirmationService';
+import { encryptionService } from './encryptionService';
+import type { Codec, AnyTuple } from '@polkadot/types/types';
+import type { StorageKey } from '@polkadot/types';
 
 interface TrackJson {
   id: { toNumber: () => number };
@@ -33,17 +24,18 @@ interface DelegationInfoJson {
 }
 
 export interface ReferendumInfo {
-  index: number;
+  id: number;
   title: string;
   description: string;
   proposer: string;
-  status: 'Ongoing' | 'Passed' | 'Rejected' | 'Cancelled';
-  voteCount: {
-    ayes: string;
-    nays: string;
-  };
+  status: 'active' | 'passed' | 'rejected' | 'cancelled';
+  track: string;
+  voteStart: number;
+  voteEnd: number;
   threshold: string;
-  end: number;
+  ayes: string;
+  nays: string;
+  turnout: string;
 }
 
 export interface Track {
@@ -54,6 +46,9 @@ export interface Track {
   decisionPeriod: number;
   preparePeriod: number;
   confirmPeriod: number;
+  decidingPeriod: number;
+  minApproval: number;
+  minSupport: number;
 }
 
 export interface Vote {
@@ -75,6 +70,19 @@ export interface DelegationInfo {
   timestamp: number;
 }
 
+export interface DelegateInfo {
+  address: string;
+  name?: string;
+  delegatedBalance: string;
+  delegatorCount: number;
+  tracks: string[];
+  votingHistory: {
+    total: number;
+    lastMonth: number;
+    participation: number;
+  };
+}
+
 class GovernanceService {
   private static instance: GovernanceService;
 
@@ -87,50 +95,157 @@ class GovernanceService {
     return GovernanceService.instance;
   }
 
-  async getReferenda(): Promise<ReferendumInfo[]> {
+  async getReferenda(filters?: {
+    status?: string;
+    track?: string;
+    favorites?: boolean;
+  }): Promise<ReferendumInfo[]> {
     try {
       const api = await polkadotService.getApi();
-      if (!api.query.democracy?.referendumInfoOf) {
+      if (!api?.query?.referenda?.referendumInfoFor) {
         throw new PolkadotHubError(
-          'API not ready',
-          ErrorCodes.GOVERNANCE.PROPOSAL_FAILED,
-          'Democracy module not available'
+          'API not initialized',
+          ErrorCodes.API.ERROR,
+          'Please try again in a few moments.'
         );
       }
 
-      const referenda = await api.query.democracy.referendumInfoOf.entries();
+      const referenda = await api.query.referenda.referendumInfoFor.entries();
+      let results = referenda
+        .map(([key, value]: [StorageKey<AnyTuple>, Codec]) => {
+          try {
+            const id = (key.args[0] as any).toNumber();
+            const info = (value as any).unwrap();
+            
+            if (!info || info.isNone) return null;
 
-      return referenda
-        .map(([key, value]) => {
-          const info = value.toJSON() as ReferendumInfoJson;
-          if (!info || info.ended) return null;
+            const data = info.unwrap();
+            if (!data || !data.track || !data.proposer || !data.submitted || !data.length || !data.threshold || !data.tally) {
+              return null;
+            }
 
-          const keyData = key as unknown as { args: { toNumber: () => number }[] };
-          if (!keyData.args?.[0]) return null;
-
-          const index = keyData.args[0].toNumber();
-          return {
-            index,
-            title: info.title || `Referendum #${index}`,
-            description: info.description || '',
-            proposer: info.proposer || '',
-            status: (info.status || 'Ongoing') as ReferendumInfo['status'],
-            voteCount: {
-              ayes: (info.tally?.ayes || '0').toString(),
-              nays: (info.tally?.nays || '0').toString()
-            },
-            threshold: info.threshold || 'SimpleMajority',
-            end: info.end || 0
-          };
+            const track = data.track.toString();
+            const status = this.getReferendumStatus(data);
+            
+            return {
+              id,
+              title: `Referendum #${id}`,
+              description: 'Description placeholder', // TODO: Get from IPFS or chain storage
+              proposer: data.proposer.toString(),
+              status,
+              track,
+              voteStart: data.submitted.toNumber(),
+              voteEnd: data.submitted.toNumber() + data.length.toNumber(),
+              threshold: data.threshold.toString(),
+              ayes: data.tally.ayes.toString(),
+              nays: data.tally.nays.toString(),
+              turnout: data.tally.turnout.toString()
+            };
+          } catch (error) {
+            console.error('Failed to parse referendum:', error);
+            return null;
+          }
         })
         .filter((ref): ref is ReferendumInfo => ref !== null);
+
+      // Apply filters
+      if (filters) {
+        if (filters.status && filters.status !== 'all') {
+          results = results.filter(ref => ref.status === filters.status);
+        }
+        if (filters.track && filters.track !== 'all') {
+          results = results.filter(ref => ref.track === filters.track);
+        }
+      }
+
+      return results;
     } catch (error) {
       throw new PolkadotHubError(
         'Failed to fetch referenda',
-        ErrorCodes.GOVERNANCE.PROPOSAL_FAILED,
-        'Could not load active referenda. Please try again.'
+        ErrorCodes.API.REQUEST_FAILED,
+        'Could not load referenda. Please try again.'
       );
     }
+  }
+
+  async getFavoriteReferenda(address: string): Promise<number[]> {
+    try {
+      const response = await fetch(`/api/governance/favorites?address=${address}`);
+      if (!response.ok) throw new Error('Failed to fetch favorites');
+      const data = await response.json();
+      return data.favorites;
+    } catch (error) {
+      console.error('Failed to fetch favorite referenda:', error);
+      return [];
+    }
+  }
+
+  async addFavoriteReferendum(address: string, referendumId: number): Promise<void> {
+    try {
+      const response = await fetch('/api/governance/favorites', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ address, referendumId }),
+      });
+      if (!response.ok) throw new Error('Failed to add favorite');
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to add favorite',
+        ErrorCodes.API.REQUEST_FAILED,
+        'Could not add referendum to favorites. Please try again.'
+      );
+    }
+  }
+
+  async removeFavoriteReferendum(address: string, referendumId: number): Promise<void> {
+    try {
+      const response = await fetch('/api/governance/favorites', {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ address, referendumId }),
+      });
+      if (!response.ok) throw new Error('Failed to remove favorite');
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to remove favorite',
+        ErrorCodes.API.REQUEST_FAILED,
+        'Could not remove referendum from favorites. Please try again.'
+      );
+    }
+  }
+
+  async getDelegates(): Promise<DelegateInfo[]> {
+    try {
+      const api = await polkadotService.getApi();
+      if (!api?.query?.convictionVoting) {
+        throw new PolkadotHubError(
+          'API not initialized',
+          ErrorCodes.API.ERROR,
+          'Please try again in a few moments.'
+        );
+      }
+
+      // TODO: Implement delegate fetching from chain
+      return [];
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to fetch delegates',
+        ErrorCodes.API.REQUEST_FAILED,
+        'Could not load delegates. Please try again.'
+      );
+    }
+  }
+
+  private getReferendumStatus(data: any): ReferendumInfo['status'] {
+    if (data.ongoing) return 'active';
+    if (data.approved) return 'passed';
+    if (data.rejected) return 'rejected';
+    if (data.cancelled) return 'cancelled';
+    return 'active';
   }
 
   async getTracks(): Promise<Track[]> {
@@ -154,7 +269,10 @@ class GovernanceService {
         minDeposit: track.minDeposit.toString(),
         decisionPeriod: track.decisionPeriod.toNumber(),
         preparePeriod: track.preparePeriod.toNumber(),
-        confirmPeriod: track.confirmPeriod.toNumber()
+        confirmPeriod: track.confirmPeriod.toNumber(),
+        decidingPeriod: track.decisionPeriod.toNumber(),
+        minApproval: 0.5,
+        minSupport: 0.5
       }));
     } catch (error) {
       throw new PolkadotHubError(
@@ -173,6 +291,18 @@ class GovernanceService {
     balance: string
   ): Promise<string> {
     try {
+      // Perform security audit before transaction
+      await securityAuditService.auditTransaction({
+        type: 'vote',
+        from: address.toString(),
+        amount: balance,
+        metadata: {
+          referendumIndex,
+          vote,
+          conviction
+        }
+      });
+
       const api = await polkadotService.getApi();
       if (!api.tx.democracy?.vote) {
         throw new PolkadotHubError(
@@ -189,8 +319,22 @@ class GovernanceService {
         }
       });
 
-      const hash = await tx.signAndSend(address);
-      return hash.toString();
+      const result = await transactionConfirmationService.confirmAndSignTransaction(tx, {
+        type: 'vote',
+        from: address.toString(),
+        method: 'democracy.vote',
+        args: [referendumIndex, vote, conviction, balance]
+      });
+
+      if (!result.success) {
+        throw new PolkadotHubError(
+          result.error || 'Vote failed',
+          ErrorCodes.GOVERNANCE.VOTE_FAILED,
+          'Could not submit your vote. Please try again.'
+        );
+      }
+
+      return result.hash || '';
     } catch (error) {
       throw new PolkadotHubError(
         'Failed to submit vote',
@@ -208,6 +352,18 @@ class GovernanceService {
     conviction: number
   ): Promise<string> {
     try {
+      // Perform security audit before transaction
+      await securityAuditService.auditTransaction({
+        type: 'delegate',
+        from: address.toString(),
+        to: target,
+        amount: balance,
+        metadata: {
+          track,
+          conviction
+        }
+      });
+
       const api = await polkadotService.getApi();
       if (!api.tx.convictionVoting?.delegate) {
         throw new PolkadotHubError(
@@ -224,8 +380,24 @@ class GovernanceService {
         balance
       );
 
-      const hash = await tx.signAndSend(address);
-      return hash.toString();
+      const result = await transactionConfirmationService.confirmAndSignTransaction(tx, {
+        type: 'delegate',
+        from: address.toString(),
+        to: target,
+        amount: balance,
+        method: 'convictionVoting.delegate',
+        args: [track, target, conviction, balance]
+      });
+
+      if (!result.success) {
+        throw new PolkadotHubError(
+          result.error || 'Delegation failed',
+          ErrorCodes.GOVERNANCE.DELEGATION_FAILED,
+          'Could not delegate your voting power. Please try again.'
+        );
+      }
+
+      return result.hash || '';
     } catch (error) {
       throw new PolkadotHubError(
         'Failed to delegate votes',
@@ -240,6 +412,15 @@ class GovernanceService {
     track: number
   ): Promise<string> {
     try {
+      // Perform security audit before transaction
+      await securityAuditService.auditTransaction({
+        type: 'undelegate',
+        from: address.toString(),
+        metadata: {
+          track
+        }
+      });
+
       const api = await polkadotService.getApi();
       if (!api.tx.convictionVoting?.undelegate) {
         throw new PolkadotHubError(
@@ -251,8 +432,22 @@ class GovernanceService {
 
       const tx = api.tx.convictionVoting.undelegate(track);
 
-      const hash = await tx.signAndSend(address);
-      return hash.toString();
+      const result = await transactionConfirmationService.confirmAndSignTransaction(tx, {
+        type: 'undelegate',
+        from: address.toString(),
+        method: 'convictionVoting.undelegate',
+        args: [track]
+      });
+
+      if (!result.success) {
+        throw new PolkadotHubError(
+          result.error || 'Undelegation failed',
+          ErrorCodes.GOVERNANCE.DELEGATION_FAILED,
+          'Could not undelegate your voting power. Please try again.'
+        );
+      }
+
+      return result.hash || '';
     } catch (error) {
       throw new PolkadotHubError(
         'Failed to undelegate votes',
@@ -275,25 +470,46 @@ class GovernanceService {
 
       const delegations = await api.query.convictionVoting.votingFor.entries(address);
 
-      return delegations.map(([key, value]) => {
-        const delegationInfo = value.toJSON() as DelegationInfoJson;
-        const keyData = key as unknown as { args: { toNumber: () => number }[] };
-        if (!keyData.args?.[1] || !delegationInfo?.target || !delegationInfo?.balance) {
-          throw new PolkadotHubError(
-            'Invalid delegation data',
-            ErrorCodes.GOVERNANCE.DELEGATION_FAILED,
-            'Could not parse delegation information'
-          );
-        }
+      // Encrypt sensitive delegation data
+      const encryptedDelegations = await Promise.all(
+        delegations.map(async ([key, value]) => {
+          const delegationInfo = value.toJSON() as DelegationInfoJson;
+          const keyData = key as unknown as { args: { toNumber: () => number }[] };
+          
+          if (!keyData.args?.[1] || !delegationInfo?.target || !delegationInfo?.balance) {
+            throw new PolkadotHubError(
+              'Invalid delegation data',
+              ErrorCodes.GOVERNANCE.DELEGATION_FAILED,
+              'Could not parse delegation information'
+            );
+          }
 
-        return {
-          delegator: address,
-          target: delegationInfo.target,
-          track: keyData.args[1].toNumber(),
-          balance: delegationInfo.balance,
-          timestamp: Date.now()
-        };
-      });
+          const delegation = {
+            delegator: address,
+            target: delegationInfo.target,
+            track: keyData.args[1].toNumber(),
+            balance: delegationInfo.balance,
+            timestamp: Date.now()
+          };
+
+          // Encrypt sensitive data
+          const encrypted = await encryptionService.encryptSensitiveData({
+            walletAddress: delegation.target,
+            privateData: delegation.balance,
+            metadata: {
+              track: delegation.track,
+              timestamp: delegation.timestamp
+            }
+          });
+
+          return {
+            ...delegation,
+            encryptedData: encrypted
+          };
+        })
+      );
+
+      return encryptedDelegations;
     } catch (error) {
       throw new PolkadotHubError(
         'Failed to fetch delegations',
