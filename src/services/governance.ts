@@ -69,13 +69,33 @@ export interface Track {
   minSupport: number;
 }
 
+export interface ReferendumComment {
+  id: string;
+  referendumIndex: number;
+  author: string;
+  content: string;
+  createdAt: number;
+  updatedAt: number;
+  parentId?: string;
+  reactions: {
+    [key: string]: string[]; // emoji -> array of addresses that reacted
+  };
+}
 
+export interface CreateCommentParams {
+  referendumIndex: number;
+  content: string;
+  parentId?: string | undefined;
+}
 
-
-
-
-
-
+export interface VoteHistory {
+  referendumIndex: number;
+  vote: 'aye' | 'nay';
+  amount: string;
+  timestamp: number;
+  status: 'active' | 'completed' | 'cancelled';
+  title: string;
+}
 
 class GovernanceService {
   private api: ApiPromise | null = null;
@@ -522,6 +542,166 @@ class GovernanceService {
         'Failed to undelegate votes',
         ErrorCodes.API.ERROR,
         'Could not undelegate your voting power. Please try again.'
+      );
+    }
+  }
+
+  async getComments(referendumIndex: number): Promise<ReferendumComment[]> {
+    try {
+      log.info(`Fetching comments for referendum #${referendumIndex}`);
+      const api = await this.getApi();
+      
+      if (!api.query.referenda) {
+        throw new PolkadotHubError(
+          'Governance API not available',
+          ErrorCodes.API.ERROR,
+          'The governance API endpoints are not available. Please try again.'
+        );
+      }
+
+      // TODO: Implement actual comment fetching logic
+      // For now, return mock data
+      return [
+        {
+          id: '1',
+          referendumIndex,
+          author: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
+          content: 'This is a sample comment',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+          reactions: {}
+        }
+      ];
+    } catch (error) {
+      log.error('Failed to fetch comments', error);
+      throw handleError(error);
+    }
+  }
+
+  async addComment(params: CreateCommentParams, _account: AddressOrPair): Promise<void> {
+    try {
+      log.info(`Adding comment to referendum #${params.referendumIndex}`);
+      const api = await this.getApi();
+      
+      if (!api.query.referenda) {
+        throw new PolkadotHubError(
+          'Governance API not available',
+          ErrorCodes.API.ERROR,
+          'The governance API endpoints are not available. Please try again.'
+        );
+      }
+
+      // TODO: Implement actual comment submission logic
+      // For now, just log the attempt
+      log.info('Comment would be added with params:', params);
+    } catch (error) {
+      log.error('Failed to add comment', error);
+      throw handleError(error);
+    }
+  }
+
+  async reactToComment(
+    commentId: string,
+    reaction: string,
+    _account: AddressOrPair
+  ): Promise<void> {
+    try {
+      log.info(`Adding reaction to comment ${commentId}`);
+      const api = await this.getApi();
+      
+      if (!api.query.referenda) {
+        throw new PolkadotHubError(
+          'Governance API not available',
+          ErrorCodes.API.ERROR,
+          'The governance API endpoints are not available. Please try again.'
+        );
+      }
+
+      // TODO: Implement actual reaction submission logic
+      // For now, just log the attempt
+      log.info('Reaction would be added:', { commentId, reaction });
+    } catch (error) {
+      log.error('Failed to add reaction', error);
+      throw handleError(error);
+    }
+  }
+
+  async getVotingHistory(address: string): Promise<VoteHistory[]> {
+    try {
+      log.info(`Fetching voting history for address: ${address}`);
+      const api = await this.getApi();
+      
+      if (!api.query.convictionVoting?.votingFor) {
+        throw new PolkadotHubError(
+          'Governance API not available',
+          ErrorCodes.API.ERROR,
+          'The governance API endpoints are not available. Please try again.'
+        );
+      }
+
+      // Get all referenda the address has voted on
+      const votingEntries = await api.query.convictionVoting.votingFor.entries(address);
+
+      // Process each voting entry
+      const votes = await Promise.all(
+        votingEntries.map(async ([key, value]: [{ args: AnyTuple }, Codec]) => {
+          try {
+            const referendumIndex = (key.args[1] as unknown as { toNumber(): number }).toNumber();
+            const voteInfo = value.toJSON() as any;
+
+            // Skip if not a direct vote
+            if (!voteInfo?.casting?.vote) {
+              return null;
+            }
+
+            // Get referendum details
+            if (!api.query.referenda?.referendumInfoFor) {
+              log.warn(`Referenda query not available for index ${referendumIndex}`);
+              return null;
+            }
+
+            const referendum = await api.query.referenda.referendumInfoFor(referendumIndex);
+            const referendumData = referendum.toJSON() as any;
+
+            if (!referendumData) {
+              return null;
+            }
+
+            // Determine vote status
+            let status: 'active' | 'completed' | 'cancelled' = 'active';
+            if (referendumData.approved || referendumData.rejected) {
+              status = 'completed';
+            } else if (referendumData.cancelled || referendumData.timedOut || referendumData.killed) {
+              status = 'cancelled';
+            }
+
+            // Format the vote data
+            return {
+              referendumIndex,
+              vote: voteInfo.casting.vote.aye ? 'aye' : 'nay',
+              amount: formatBalance(voteInfo.casting.vote.balance, { decimals: 10 }),
+              timestamp: Number(voteInfo.casting.vote.at || 0),
+              status,
+              title: referendumData?.ongoing?.proposal?.title || `Referendum #${referendumIndex}`
+            };
+          } catch (error) {
+            log.error(`Error processing vote for referendum ${key.args[1]}:`, error);
+            return null;
+          }
+        })
+      );
+
+      // Filter out null values and sort by timestamp (newest first)
+      return votes
+        .filter((vote): vote is VoteHistory => vote !== null)
+        .sort((a, b) => b.timestamp - a.timestamp);
+
+    } catch (error) {
+      log.error('Failed to fetch voting history:', error);
+      throw new PolkadotHubError(
+        'Failed to fetch voting history',
+        ErrorCodes.DATA.NOT_FOUND,
+        'Could not load your voting history. Please try again.'
       );
     }
   }
