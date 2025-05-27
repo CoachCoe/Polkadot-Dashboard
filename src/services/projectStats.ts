@@ -86,7 +86,6 @@ class ProjectStatsService {
   }
 
   async getStats(): Promise<EcosystemProjectStats> {
-    const startTime = Date.now();
     log.info('Fetching project stats');
 
     if (this.lastStats && this.lastFetch) {
@@ -100,7 +99,7 @@ class ProjectStatsService {
 
     try {
       // For static build, return Polkadot stats
-      return STATIC_PROJECT_STATS['polkadot'] || {
+      const stats = STATIC_PROJECT_STATS['polkadot'] || {
         tvl: 0,
         dailyActiveUsers: 0,
         totalTransactions: 0,
@@ -108,6 +107,12 @@ class ProjectStatsService {
         tokenPrice: 0,
         marketCap: 0
       };
+
+      this.lastStats = stats;
+      this.lastFetch = new Date();
+      log.info('Stats fetch completed successfully');
+
+      return stats;
     } catch (error) {
       log.error('Failed to fetch project stats', error);
       throw new PolkadotHubError(
@@ -119,7 +124,6 @@ class ProjectStatsService {
   }
 
   async getProjectStats(projectId: string, _chainId: string): Promise<EcosystemProjectStats> {
-    const startTime = Date.now();
     log.info(`Fetching stats for project ${projectId}`);
 
     try {
@@ -140,9 +144,7 @@ class ProjectStatsService {
       };
 
       this.setCachedData(`project_${projectId}`, stats);
-      
       log.info('Project stats fetch completed successfully');
-      log.performance('getProjectStats', startTime);
 
       return stats;
     } catch (error) {
