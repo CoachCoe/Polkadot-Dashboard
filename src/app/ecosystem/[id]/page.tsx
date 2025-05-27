@@ -1,15 +1,11 @@
-'use client';
-
-import { useEffect, useState } from 'react';
 import { Project } from '@/types/ecosystem';
-import { ecosystemService } from '@/services/ecosystem/ecosystemService';
+import { ecosystemService } from '@/services/ecosystem';
 import { Card } from '@/components/ui/Card';
 import { Badge } from '@/components/ui/Badge';
 import { Button } from '@/components/ui/Button';
 import Image from 'next/image';
 import Link from 'next/link';
 import { formatNumber } from '@/utils/formatters';
-import { useToast } from '@/hooks/useToast';
 
 interface ProjectDetailsProps {
   params: {
@@ -17,38 +13,15 @@ interface ProjectDetailsProps {
   };
 }
 
+export async function generateStaticParams() {
+  const projects = ecosystemService.getAllProjects();
+  return projects.map((project) => ({
+    id: project.id,
+  }));
+}
+
 export default function ProjectDetailsPage({ params }: ProjectDetailsProps) {
-  const { showToast } = useToast();
-  const [project, setProject] = useState<Project | null>(null);
-  const [loading, setLoading] = useState(true);
-
-  useEffect(() => {
-    loadProject();
-  }, [params.id]);
-
-  const loadProject = async () => {
-    try {
-      setLoading(true);
-      const data = await ecosystemService.getProjectById(params.id);
-      setProject(data);
-    } catch (error) {
-      showToast({
-        title: 'Error',
-        description: error instanceof Error ? error.message : 'Failed to load project details',
-        variant: 'destructive'
-      });
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  if (loading) {
-    return (
-      <div className="container mx-auto px-4 py-8">
-        <div className="text-center">Loading project details...</div>
-      </div>
-    );
-  }
+  const project = ecosystemService.getProjectById(params.id);
 
   if (!project) {
     return (
@@ -202,19 +175,8 @@ export default function ProjectDetailsPage({ params }: ProjectDetailsProps) {
                   className="w-full justify-start"
                   asChild
                 >
-                  <Link href={project.socialLinks.website} target="_blank">
-                    🌐 Website
-                  </Link>
-                </Button>
-              )}
-              {project.socialLinks.documentation && (
-                <Button
-                  variant="outline"
-                  className="w-full justify-start"
-                  asChild
-                >
-                  <Link href={project.socialLinks.documentation} target="_blank">
-                    📚 Documentation
+                  <Link href={project.socialLinks.website} target="_blank" rel="noopener noreferrer">
+                    Website
                   </Link>
                 </Button>
               )}
@@ -224,8 +186,8 @@ export default function ProjectDetailsPage({ params }: ProjectDetailsProps) {
                   className="w-full justify-start"
                   asChild
                 >
-                  <Link href={project.socialLinks.github} target="_blank">
-                    💻 GitHub
+                  <Link href={project.socialLinks.github} target="_blank" rel="noopener noreferrer">
+                    GitHub
                   </Link>
                 </Button>
               )}
@@ -235,8 +197,8 @@ export default function ProjectDetailsPage({ params }: ProjectDetailsProps) {
                   className="w-full justify-start"
                   asChild
                 >
-                  <Link href={project.socialLinks.twitter} target="_blank">
-                    🐦 Twitter
+                  <Link href={project.socialLinks.twitter} target="_blank" rel="noopener noreferrer">
+                    Twitter
                   </Link>
                 </Button>
               )}
@@ -246,8 +208,8 @@ export default function ProjectDetailsPage({ params }: ProjectDetailsProps) {
                   className="w-full justify-start"
                   asChild
                 >
-                  <Link href={project.socialLinks.discord} target="_blank">
-                    💬 Discord
+                  <Link href={project.socialLinks.discord} target="_blank" rel="noopener noreferrer">
+                    Discord
                   </Link>
                 </Button>
               )}
@@ -257,39 +219,13 @@ export default function ProjectDetailsPage({ params }: ProjectDetailsProps) {
                   className="w-full justify-start"
                   asChild
                 >
-                  <Link href={project.socialLinks.telegram} target="_blank">
-                    ✈️ Telegram
+                  <Link href={project.socialLinks.telegram} target="_blank" rel="noopener noreferrer">
+                    Telegram
                   </Link>
                 </Button>
               )}
             </div>
           </Card>
-
-          {project.githubStats && (
-            <Card className="p-6">
-              <h2 className="text-xl font-semibold mb-4">GitHub Stats</h2>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <p className="text-sm text-gray-500">Stars</p>
-                  <p className="font-medium">{formatNumber(project.githubStats.stars)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Forks</p>
-                  <p className="font-medium">{formatNumber(project.githubStats.forks)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Contributors</p>
-                  <p className="font-medium">{formatNumber(project.githubStats.contributors)}</p>
-                </div>
-                <div>
-                  <p className="text-sm text-gray-500">Last Update</p>
-                  <p className="font-medium">
-                    {new Date(project.githubStats.lastUpdate).toLocaleDateString()}
-                  </p>
-                </div>
-              </div>
-            </Card>
-          )}
         </div>
       </div>
     </div>
