@@ -195,7 +195,7 @@ export function ReferendumList() {
             </DialogTitle>
           </DialogHeader>
           {selectedReferendum && (
-            <ReferendumComments referendumId={selectedReferendum.id} />
+            <ReferendumComments referendumId={String(selectedReferendum.id)} />
           )}
         </DialogContent>
       </Dialog>
