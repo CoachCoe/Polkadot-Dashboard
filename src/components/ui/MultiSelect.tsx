@@ -143,37 +143,82 @@ const SelectSeparator = React.forwardRef<
 ));
 SelectSeparator.displayName = SelectPrimitive.Separator.displayName;
 
-interface SelectProps<T extends string> {
-  value: T;
-  onValueChange: (value: T) => void;
+interface MultiSelectProps<T extends string> {
+  value: T[];
+  onValueChange: (value: T[]) => void;
   items: { value: T; label: string }[];
   placeholder?: string;
   disabled?: boolean;
   className?: string;
 }
 
-const Select = React.forwardRef<HTMLButtonElement, SelectProps<string>>(
-  ({ value, onValueChange, items, placeholder, disabled, className }, ref) => {
-    return (
-      <SelectRoot value={value} onValueChange={onValueChange}>
-        <SelectTrigger ref={ref} className={className} disabled={disabled}>
-          <SelectValue placeholder={placeholder} />
-        </SelectTrigger>
-        <SelectContent>
-          {items.map((item) => (
-            <SelectItem key={item.value} value={item.value}>
-              {item.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </SelectRoot>
-    );
-  }
-);
-Select.displayName = 'Select';
+function MultiSelect<T extends string>({
+  value,
+  onValueChange,
+  items,
+  placeholder,
+  disabled,
+  className
+}: MultiSelectProps<T>) {
+  const [selectedValues, setSelectedValues] = React.useState<T[]>(value);
+
+  React.useEffect(() => {
+    setSelectedValues(value);
+  }, [value]);
+
+  const handleValueChange = (itemValue: T) => {
+    const newValues = selectedValues.includes(itemValue)
+      ? selectedValues.filter((v) => v !== itemValue)
+      : [...selectedValues, itemValue];
+    setSelectedValues(newValues);
+    onValueChange(newValues);
+  };
+
+  return (
+    <div className="relative">
+      <div className="flex flex-wrap gap-1 min-h-[2.5rem] p-1 border rounded-md bg-background">
+        {selectedValues.map((selectedValue) => (
+          <div
+            key={selectedValue}
+            className="flex items-center gap-1 px-2 py-1 bg-gray-100 rounded"
+          >
+            <span className="text-sm">
+              {items.find((item) => item.value === selectedValue)?.label}
+            </span>
+            <button
+              type="button"
+              onClick={() => handleValueChange(selectedValue)}
+              className="text-gray-500 hover:text-gray-700"
+            >
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+      <div className="mt-1">
+        <SelectRoot>
+          <SelectTrigger className={className} disabled={disabled}>
+            <SelectValue placeholder={placeholder} />
+          </SelectTrigger>
+          <SelectContent>
+            {items.map((item) => (
+              <SelectItem
+                key={item.value}
+                value={item.value}
+                onClick={() => handleValueChange(item.value)}
+              >
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </SelectRoot>
+      </div>
+    </div>
+  );
+}
 
 export {
-  Select,
+  MultiSelect,
   SelectRoot,
   SelectGroup,
   SelectValue,

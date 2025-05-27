@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { ecosystemService, type Project, type ProjectCategory } from '@/services/ecosystem';
+import { ecosystemService } from '@/services/ecosystem';
+import { Project, ProjectCategory } from '@/types/ecosystem';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 interface EcosystemFilters {
@@ -10,8 +11,15 @@ interface EcosystemFilters {
   tags?: string[];
 }
 
+interface CategoryInfo {
+  id: ProjectCategory;
+  name: string;
+  description: string;
+  icon: string;
+}
+
 export function useEcosystem() {
-  const [categories, setCategories] = useState<ProjectCategory[]>([]);
+  const [categories, setCategories] = useState<CategoryInfo[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
   const [filters, setFilters] = useState<EcosystemFilters>({});

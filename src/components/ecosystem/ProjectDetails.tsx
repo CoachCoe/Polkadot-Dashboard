@@ -1,21 +1,21 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import {
+  ChartBarIcon,
+  CurrencyDollarIcon,
+  UserGroupIcon,
+  ClockIcon,
   GlobeAltIcon,
   CodeBracketIcon,
-  ChatBubbleLeftIcon,
-  ChartBarIcon,
-  ArrowTrendingUpIcon,
-  BanknotesIcon,
-  UserGroupIcon,
-  ArrowPathIcon
+  ChatBubbleLeftIcon
 } from '@heroicons/react/24/outline';
 import { DashboardLayout } from '@/components/layouts/DashboardLayout';
-import type { Project, ProjectStats } from '@/services/ecosystem';
+import type { Project, ProjectStats } from '@/types/ecosystem';
 
 interface DetailedStats extends ProjectStats {
   isStale?: boolean;
+  lastUpdate?: Date;
 }
 
 interface ProjectDetailsProps {
@@ -23,153 +23,182 @@ interface ProjectDetailsProps {
   project: Project;
 }
 
-export function ProjectDetails({ project: initialProject }: ProjectDetailsProps) {
-  const [project] = useState<Project>(initialProject);
-  const [stats] = useState<DetailedStats>({
-    tvl: initialProject.stats.tvl || '',
-    volume24h: initialProject.stats.volume24h || '',
-    transactions24h: initialProject.stats.transactions24h || 0,
-    uniqueUsers24h: initialProject.stats.uniqueUsers24h || 0,
-    monthlyTransactions: initialProject.stats.monthlyTransactions || 0,
-    monthlyActiveUsers: initialProject.stats.monthlyActiveUsers || 0,
-    price: initialProject.stats.price || '',
-    marketCap: initialProject.stats.marketCap || '',
-    isStale: false
-  });
+export function ProjectDetails({ id, project }: ProjectDetailsProps) {
+  const [stats, setStats] = React.useState<DetailedStats | null>(null);
+  const [isLoading, setIsLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        setIsLoading(true);
+        // TODO: Implement stats fetching
+        setStats({
+          tvl: 1200000,
+          dailyActiveUsers: 5000,
+          totalTransactions: 150000,
+          monthlyVolume: 500000,
+          tokenPrice: 1.25,
+          marketCap: 25000000,
+          lastUpdate: new Date(),
+          isStale: false
+        });
+      } catch (error) {
+        console.error('Failed to fetch project stats:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    void fetchStats();
+  }, [id]);
 
   return (
     <DashboardLayout>
-      <div className="px-6 py-8 space-y-8">
+      <div className="px-6 py-4 space-y-8">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
             <img
               src={project.logo}
-              alt={`${project.name} logo`}
-              className="h-12 w-12 rounded-full"
+              alt={project.name}
+              className="w-12 h-12 rounded-full"
             />
             <div>
-              <h1 className="text-3xl font-bold">{project.name}</h1>
+              <h1 className="text-2xl font-bold">{project.name}</h1>
               <p className="text-gray-600">{project.description}</p>
             </div>
           </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white p-6 rounded-lg shadow">
-            <div className="flex items-center">
-              <BanknotesIcon className="h-5 w-5 text-gray-400" />
-              <h2 className="ml-3 text-sm font-medium text-gray-500">TVL</h2>
-            </div>
-            <div className="mt-2 flex items-baseline">
-              <p className="text-2xl font-semibold text-gray-900">
-                {stats.tvl ? `$${Number(stats.tvl).toLocaleString()}` : 'N/A'}
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow">
-            <div className="flex items-center">
-              <ArrowTrendingUpIcon className="h-5 w-5 text-gray-400" />
-              <h2 className="ml-3 text-sm font-medium text-gray-500">24h Volume</h2>
-            </div>
-            <div className="mt-2 flex items-baseline">
-              <p className="text-2xl font-semibold text-gray-900">
-                {stats.volume24h ? `$${Number(stats.volume24h).toLocaleString()}` : 'N/A'}
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow">
-            <div className="flex items-center">
-              <ArrowPathIcon className="h-5 w-5 text-gray-400" />
-              <h2 className="ml-3 text-sm font-medium text-gray-500">Monthly Transactions</h2>
-            </div>
-            <div className="mt-2 flex items-baseline">
-              <p className="text-2xl font-semibold text-gray-900">
-                {stats.monthlyTransactions?.toLocaleString() || 'N/A'}
-              </p>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-lg shadow">
-            <div className="flex items-center">
-              <UserGroupIcon className="h-5 w-5 text-gray-400" />
-              <h2 className="ml-3 text-sm font-medium text-gray-500">Monthly Active Users</h2>
-            </div>
-            <div className="mt-2 flex items-baseline">
-              <p className="text-2xl font-semibold text-gray-900">
-                {stats.monthlyActiveUsers?.toLocaleString() || 'N/A'}
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <div className="bg-white p-6 rounded-lg shadow">
-            <div className="flex items-center">
-              <GlobeAltIcon className="h-5 w-5 text-gray-400" />
-              <h2 className="ml-3 text-sm font-medium text-gray-500">Website</h2>
-            </div>
+          <div className="flex space-x-4">
             <a
-              href={project.website}
+              href={project.socialLinks.website}
               target="_blank"
               rel="noopener noreferrer"
-              className="mt-2 text-blue-600 hover:text-blue-800"
+              className="text-gray-600 hover:text-gray-900"
             >
-              {project.website}
+              <GlobeAltIcon className="h-6 w-6" />
             </a>
+            {project.socialLinks.github && (
+              <a
+                href={project.socialLinks.github}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <CodeBracketIcon className="h-6 w-6" />
+              </a>
+            )}
+            {project.socialLinks.discord && (
+              <a
+                href={project.socialLinks.discord}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-gray-600 hover:text-gray-900"
+              >
+                <ChatBubbleLeftIcon className="h-6 w-6" />
+              </a>
+            )}
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+          {stats ? (
+            <>
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <div className="flex items-center space-x-3">
+                  <CurrencyDollarIcon className="h-6 w-6 text-pink-500" />
+                  <h3 className="text-lg font-semibold">TVL</h3>
+                </div>
+                <p className="mt-2 text-2xl font-bold">
+                  ${stats.tvl?.toLocaleString() ?? 'N/A'}
+                </p>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <div className="flex items-center space-x-3">
+                  <UserGroupIcon className="h-6 w-6 text-pink-500" />
+                  <h3 className="text-lg font-semibold">Daily Active Users</h3>
+                </div>
+                <p className="mt-2 text-2xl font-bold">
+                  {stats.dailyActiveUsers?.toLocaleString() ?? 'N/A'}
+                </p>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <div className="flex items-center space-x-3">
+                  <ChartBarIcon className="h-6 w-6 text-pink-500" />
+                  <h3 className="text-lg font-semibold">Total Transactions</h3>
+                </div>
+                <p className="mt-2 text-2xl font-bold">
+                  {stats.totalTransactions?.toLocaleString() ?? 'N/A'}
+                </p>
+              </div>
+
+              <div className="bg-white p-6 rounded-lg shadow-sm">
+                <div className="flex items-center space-x-3">
+                  <ClockIcon className="h-6 w-6 text-pink-500" />
+                  <h3 className="text-lg font-semibold">Last Update</h3>
+                </div>
+                <p className="mt-2 text-lg">
+                  {stats.lastUpdate?.toLocaleString()}
+                </p>
+              </div>
+            </>
+          ) : (
+            <div className="col-span-4 text-center py-8">
+              {isLoading ? 'Loading stats...' : 'Failed to load stats'}
+            </div>
+          )}
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="bg-white p-6 rounded-lg shadow-sm">
+            <h3 className="text-lg font-semibold mb-4">Project Information</h3>
+            <div className="space-y-4">
+              <div>
+                <p className="text-gray-600">Category</p>
+                <p className="font-medium">{project.category}</p>
+              </div>
+              <div>
+                <p className="text-gray-600">Status</p>
+                <p className="font-medium">{project.status}</p>
+              </div>
+              <div>
+                <p className="text-gray-600">Launch Date</p>
+                <p className="font-medium">
+                  {project.launchDate
+                    ? new Date(project.launchDate).toLocaleDateString()
+                    : 'N/A'}
+                </p>
+              </div>
+              <div>
+                <p className="text-gray-600">Chains</p>
+                <div className="flex flex-wrap gap-2 mt-1">
+                  {project.chains.map((chain) => (
+                    <span
+                      key={chain}
+                      className="px-2 py-1 bg-gray-100 rounded-full text-sm"
+                    >
+                      {chain}
+                    </span>
+                  ))}
+                </div>
+              </div>
+            </div>
           </div>
 
-          {project.github && (
-            <div className="bg-white p-6 rounded-lg shadow">
-              <div className="flex items-center">
-                <CodeBracketIcon className="h-5 w-5 text-gray-400" />
-                <h2 className="ml-3 text-sm font-medium text-gray-500">GitHub</h2>
-              </div>
-              <a
-                href={project.github}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 text-blue-600 hover:text-blue-800"
-              >
-                {project.github}
-              </a>
-            </div>
-          )}
-
-          {project.discord && (
-            <div className="bg-white p-6 rounded-lg shadow">
-              <div className="flex items-center">
-                <ChatBubbleLeftIcon className="h-5 w-5 text-gray-400" />
-                <h2 className="ml-3 text-sm font-medium text-gray-500">Discord</h2>
-              </div>
-              <a
-                href={project.discord}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 text-blue-600 hover:text-blue-800"
-              >
-                {project.discord}
-              </a>
-            </div>
-          )}
-
-          {project.twitter && (
-            <div className="bg-white p-6 rounded-lg shadow">
-              <div className="flex items-center">
-                <ChartBarIcon className="h-5 w-5 text-gray-400" />
-                <h2 className="ml-3 text-sm font-medium text-gray-500">Twitter</h2>
-              </div>
-              <a
-                href={project.twitter}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="mt-2 text-blue-600 hover:text-blue-800"
-              >
-                {project.twitter}
-              </a>
-            </div>
-          )}
+          <div className="bg-white p-6 rounded-lg shadow-sm">
+            <h3 className="text-lg font-semibold mb-4">Features</h3>
+            {project.features ? (
+              <ul className="list-disc list-inside space-y-2">
+                {project.features.map((feature, index) => (
+                  <li key={index} className="text-gray-700">
+                    {feature}
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-gray-500">No features listed</p>
+            )}
+          </div>
         </div>
       </div>
     </DashboardLayout>

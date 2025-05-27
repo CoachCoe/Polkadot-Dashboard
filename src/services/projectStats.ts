@@ -1,4 +1,5 @@
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
+import { ProjectStats as EcosystemProjectStats } from '@/types/ecosystem';
 
 
 // Add logger
@@ -14,24 +15,12 @@ const log = {
   }
 };
 
-export interface ProjectStats {
-  tvl: string;
-  volume24h: string;
-  transactions24h: number;
-  uniqueUsers24h: number;
-  monthlyTransactions: number;
-  monthlyActiveUsers: number;
-  price: string;
-  marketCap: string;
-  lastUpdate?: Date;
-}
-
 const cache = new Map<string, { data: any; timestamp: number }>();
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 class ProjectStatsService {
   private static instance: ProjectStatsService;
-  private lastStats: ProjectStats | null = null;
+  private lastStats: EcosystemProjectStats | null = null;
   private lastFetch: Date | null = null;
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
   
@@ -61,7 +50,7 @@ class ProjectStatsService {
     cache.set(key, { data, timestamp: Date.now() });
   }
 
-  async getStats(): Promise<ProjectStats> {
+  async getStats(): Promise<EcosystemProjectStats> {
     const startTime = Date.now();
     log.info('Fetching project stats');
 
@@ -81,16 +70,13 @@ class ProjectStatsService {
         fetch('/api/stats/defillama?projectId=polkadot').then(res => res.json())
       ]);
 
-      const stats: ProjectStats = {
-        tvl: chainData.tvl || '0',
-        volume24h: priceData.volume24h || '0',
-        transactions24h: chainData.transactions24h || 0,
-        uniqueUsers24h: chainData.uniqueUsers24h || 0,
-        monthlyTransactions: chainData.monthlyTransactions || 0,
-        monthlyActiveUsers: chainData.monthlyActiveUsers || 0,
-        price: priceData.price || '0',
-        marketCap: priceData.marketCap || '0',
-        lastUpdate: new Date()
+      const stats: EcosystemProjectStats = {
+        tvl: Number(chainData.tvl) || 0,
+        dailyActiveUsers: chainData.uniqueUsers24h || 0,
+        totalTransactions: chainData.monthlyTransactions || 0,
+        monthlyVolume: Number(priceData.volume24h) || 0,
+        tokenPrice: Number(priceData.price) || 0,
+        marketCap: Number(priceData.marketCap) || 0
       };
 
       this.lastStats = stats;
@@ -110,7 +96,7 @@ class ProjectStatsService {
     }
   }
 
-  async getProjectStats(projectId: string, chainId: string): Promise<ProjectStats> {
+  async getProjectStats(projectId: string, chainId: string): Promise<EcosystemProjectStats> {
     const startTime = Date.now();
     log.info(`Fetching stats for project ${projectId} on chain ${chainId}`);
 
@@ -129,16 +115,13 @@ class ProjectStatsService {
         fetch(`/api/stats/defillama?projectId=${projectId}&chainId=${chainId}`).then(res => res.json())
       ]);
 
-      const stats: ProjectStats = {
-        tvl: chainData.tvl || '0',
-        volume24h: priceData.volume24h || '0',
-        transactions24h: chainData.transactions24h || 0,
-        uniqueUsers24h: chainData.uniqueUsers24h || 0,
-        monthlyTransactions: chainData.monthlyTransactions || 0,
-        monthlyActiveUsers: chainData.monthlyActiveUsers || 0,
-        price: priceData.price || '0',
-        marketCap: priceData.marketCap || '0',
-        lastUpdate: new Date()
+      const stats: EcosystemProjectStats = {
+        tvl: Number(chainData.tvl) || 0,
+        dailyActiveUsers: chainData.uniqueUsers24h || 0,
+        totalTransactions: chainData.monthlyTransactions || 0,
+        monthlyVolume: Number(priceData.volume24h) || 0,
+        tokenPrice: Number(priceData.price) || 0,
+        marketCap: Number(priceData.marketCap) || 0
       };
 
       this.setCachedData(`project_${projectId}`, stats);

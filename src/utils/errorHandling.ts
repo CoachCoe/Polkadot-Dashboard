@@ -162,7 +162,8 @@ export const ErrorCodes = {
     UNBONDING_ERROR: 'STAKING_UNBONDING_ERROR' as const,
     WITHDRAWAL_ERROR: 'STAKING_WITHDRAWAL_ERROR' as const,
     INSUFFICIENT_BALANCE: 'STAKING_INSUFFICIENT_BALANCE' as const,
-    ALREADY_NOMINATED: 'STAKING_ALREADY_NOMINATED' as const
+    ALREADY_NOMINATED: 'STAKING_ALREADY_NOMINATED' as const,
+    REWARD_ERROR: 'STAKING_REWARD_ERROR' as const
   },
 
   // Governance errors
@@ -328,10 +329,10 @@ const SAFE_ERROR_MESSAGES: Record<ErrorCode, string> = {
   'NOT_FOUND': 'Resource not found',
 
   // API errors
-  'API_ERROR': 'API error',
-  'API_REQUEST_FAILED': 'API request failed',
-  'API_NETWORK_ERROR': 'API network error',
-  'API_TIMEOUT': 'API request timed out',
+  'API_ERROR': 'An error occurred while communicating with the server.',
+  'API_REQUEST_FAILED': 'Failed to complete API request',
+  'API_NETWORK_ERROR': 'Network error occurred',
+  'API_TIMEOUT': 'The request timed out. Please try again.',
   'API_INVALID_RESPONSE': 'Invalid API response',
 
   // WebSocket errors
@@ -342,12 +343,13 @@ const SAFE_ERROR_MESSAGES: Record<ErrorCode, string> = {
 
   // Staking errors
   'STAKING_POOL_ERROR': 'Staking pool error',
-  'STAKING_VALIDATOR_ERROR': 'Validator error',
+  'STAKING_VALIDATOR_ERROR': 'Error loading validator information.',
   'STAKING_NOMINATION_ERROR': 'Nomination error',
   'STAKING_UNBONDING_ERROR': 'Unbonding error',
   'STAKING_WITHDRAWAL_ERROR': 'Withdrawal error',
   'STAKING_INSUFFICIENT_BALANCE': 'Insufficient balance for staking',
   'STAKING_ALREADY_NOMINATED': 'Already nominated',
+  'STAKING_REWARD_ERROR': 'Error calculating rewards.',
 
   // Governance errors
   'GOVERNANCE_VOTE_FAILED': 'Vote failed',
@@ -359,23 +361,23 @@ const SAFE_ERROR_MESSAGES: Record<ErrorCode, string> = {
   'GOVERNANCE_DELEGATION_ERROR': 'Delegation error',
 
   // Portfolio errors
-  'PORTFOLIO_STATS_ERROR': 'Failed to load portfolio stats',
-  'PORTFOLIO_BALANCE_ERROR': 'Failed to load portfolio balance',
-  'PORTFOLIO_TOKEN_ERROR': 'Failed to load token data',
-  'PORTFOLIO_TRANSACTION_ERROR': 'Portfolio transaction failed',
+  'PORTFOLIO_STATS_ERROR': 'Failed to fetch portfolio statistics',
+  'PORTFOLIO_BALANCE_ERROR': 'Failed to fetch portfolio balance',
+  'PORTFOLIO_TOKEN_ERROR': 'Failed to fetch token information',
+  'PORTFOLIO_TRANSACTION_ERROR': 'Failed to fetch transaction history',
   'PORTFOLIO_FETCH_ERROR': 'Failed to fetch portfolio',
   'PORTFOLIO_UPDATE_ERROR': 'Failed to update portfolio',
 
   // OnRamp errors
-  'ONRAMP_QUOTE_ERROR': 'Failed to get on-ramp quote',
-  'ONRAMP_TRANSACTION_ERROR': 'On-ramp transaction failed',
-  'ONRAMP_PROVIDER_ERROR': 'On-ramp provider error',
+  'ONRAMP_QUOTE_ERROR': 'Failed to get price quote.',
+  'ONRAMP_TRANSACTION_ERROR': 'The payment transaction failed.',
+  'ONRAMP_PROVIDER_ERROR': 'The payment provider encountered an error.',
   'ONRAMP_UNSUPPORTED_REGION': 'Region not supported',
   'ONRAMP_PAYMENT_FAILED': 'Payment failed',
   'ONRAMP_KYC_REQUIRED': 'KYC verification required',
 
   // Staking errors
-  'STAKING_NOMINATION_FAILED': 'Nomination failed',
+  'STAKING_NOMINATION_FAILED': 'Failed to submit nomination.',
   'STAKING_UNBONDING_FAILED': 'Unbonding failed',
   'STAKING_WITHDRAWAL_FAILED': 'Withdrawal failed'
 };

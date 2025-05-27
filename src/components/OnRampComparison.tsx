@@ -127,7 +127,7 @@ export const OnRampComparison: React.FC<OnRampComparisonProps> = ({ onProviderSe
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-gray-500">Rate</span>
-                    <span>1 {cryptoCurrency} = {formatCurrency(quote.rate, fiatCurrency)}</span>
+                    <span>1 {cryptoCurrency} = {formatCurrency(Number(quote.rate), fiatCurrency)}</span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">You Get</span>
@@ -135,11 +135,11 @@ export const OnRampComparison: React.FC<OnRampComparisonProps> = ({ onProviderSe
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-500">Fees</span>
-                    <span>{formatCurrency(quote.fees.total, fiatCurrency)}</span>
+                    <span>{formatCurrency(Number(quote.fees.total), fiatCurrency)}</span>
                   </div>
                   <div className="flex justify-between font-semibold">
                     <span>Total Cost</span>
-                    <span>{formatCurrency(quote.total, fiatCurrency)}</span>
+                    <span>{formatCurrency(Number(quote.total), fiatCurrency)}</span>
                   </div>
                 </div>
 
