@@ -3,10 +3,6 @@
 import React, { useState, useEffect } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { useWalletStore } from '@/store/useWalletStore';
-import { Button } from '@/components/ui/Button';
-import { Textarea } from '@/components/ui/Textarea';
-import { Avatar } from '@/components/ui/Avatar';
-import { formatTimeAgo } from '@/utils/formatters';
 
 interface Comment {
   id: string;
