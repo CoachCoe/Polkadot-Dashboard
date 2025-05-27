@@ -21,7 +21,7 @@ export async function generateStaticParams() {
 }
 
 export default function ProjectDetailsPage({ params }: ProjectDetailsProps) {
-  const project = ecosystemService.getProjectById(params.id);
+  const project: Project | undefined = ecosystemService.getProjectById(params.id);
 
   if (!project) {
     return (
