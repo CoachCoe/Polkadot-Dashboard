@@ -2,18 +2,9 @@
 
 import { ArrowUpIcon, ArrowDownIcon } from '@heroicons/react/24/solid';
 import { Skeleton } from '@/components/ui/Skeleton';
-
-interface Transaction {
-  id: string;
-  type: 'send' | 'receive' | 'swap' | 'bridge';
-  amount: string;
-  symbol: string;
-  timestamp: string;
-  status: 'pending' | 'completed' | 'failed';
-  from: string;
-  to: string;
-  chain: string;
-}
+import { Transaction } from '@/services/portfolioService';
+import Link from 'next/link';
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 
 interface TransactionListProps {
   transactions: Transaction[];
@@ -40,38 +31,58 @@ export function TransactionList({ transactions, isLoading }: TransactionListProp
     );
   }
 
+  function formatAddress(address: string) {
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  }
+
   return (
     <div className="space-y-4">
       {transactions.map((tx) => (
-        <div key={tx.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+        <div key={tx.hash} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
           <div className="flex items-center space-x-4">
             <div className={`p-2 rounded-full ${
-              tx.type === 'receive' ? 'bg-green-100' : 'bg-blue-100'
+              tx.type === 'transfer' ? 'bg-blue-100' :
+              tx.type === 'staking' ? 'bg-green-100' :
+              tx.type === 'governance' ? 'bg-purple-100' :
+              'bg-orange-100'
             }`}>
-              {tx.type === 'receive' ? (
+              {tx.type === 'transfer' ? (
+                <ArrowUpIcon className="w-4 h-4 text-blue-600" />
+              ) : tx.type === 'staking' ? (
                 <ArrowDownIcon className="w-4 h-4 text-green-600" />
               ) : (
-                <ArrowUpIcon className="w-4 h-4 text-blue-600" />
+                <ArrowTopRightOnSquareIcon className="w-4 h-4 text-orange-600" />
               )}
             </div>
             <div>
               <p className="font-semibold capitalize">{tx.type}</p>
               <p className="text-sm text-gray-500">
-                {tx.type === 'receive' ? 'From: ' : 'To: '}
-                {tx.type === 'receive' ? tx.from : tx.to}
+                From: {formatAddress(tx.from)}
+              </p>
+              <p className="text-sm text-gray-500">
+                To: {formatAddress(tx.to)}
               </p>
             </div>
           </div>
           
           <div className="text-right">
             <p className="font-semibold">
-              {tx.type === 'receive' ? '+' : '-'}{tx.amount} {tx.symbol}
+              {tx.amount} DOT
             </p>
             <p className="text-sm text-gray-500">{tx.chain}</p>
+            <Link
+              href={tx.blockExplorerUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-500 hover:text-gray-700 inline-flex items-center space-x-1"
+            >
+              <span>View</span>
+              <ArrowTopRightOnSquareIcon className="w-4 h-4" />
+            </Link>
           </div>
 
           <div className={`ml-4 px-2 py-1 rounded text-sm ${
-            tx.status === 'completed' ? 'bg-green-100 text-green-700' :
+            tx.status === 'success' ? 'bg-green-100 text-green-700' :
             tx.status === 'pending' ? 'bg-yellow-100 text-yellow-700' :
             'bg-red-100 text-red-700'
           }`}>

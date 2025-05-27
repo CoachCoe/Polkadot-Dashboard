@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import { DashboardLayout } from '@/components/layouts/DashboardLayout';
 import { useWalletStore } from '@/store/useWalletStore';
 import { NominationPools } from '@/components/staking/NominationPools';
@@ -10,6 +10,11 @@ import { RewardsHistory } from '@/components/staking/RewardsHistory';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
+import { ValidatorAnalytics } from '@/components/staking/ValidatorAnalytics';
+import { StakingHistory } from '@/components/staking/StakingHistory';
+import { Skeleton } from '@/components/ui/Skeleton';
+
+export const dynamic = 'force-dynamic';
 
 export default function StakingPage() {
   const { selectedAccount } = useWalletStore();
@@ -72,6 +77,11 @@ export default function StakingPage() {
     );
   }
 
+  // For demo purposes, using a static validator address
+  const demoValidatorAddress = '15oF4uVJwmo4TdGW7VfQxNLavjCXviqxT9S1MgbjMNHr6Sp5';
+  // For demo purposes, using a static staker address
+  const demoStakerAddress = '14UpF4E6CkKM8a6UxyCuSD5sDjNFzACexuVwqL3zqZbzhSEk';
+
   return (
     <DashboardLayout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
@@ -93,17 +103,33 @@ export default function StakingPage() {
             </TabsList>
 
             <TabsContent value="pools" className="mt-6">
-              <NominationPools />
+              <Suspense fallback={<Skeleton className="h-96" />}>
+                <NominationPools />
+              </Suspense>
             </TabsContent>
 
             <TabsContent value="validators" className="mt-6">
-              <ValidatorList />
+              <Suspense fallback={<Skeleton className="h-96" />}>
+                <ValidatorList />
+              </Suspense>
             </TabsContent>
 
             <TabsContent value="rewards" className="mt-6">
-              <RewardsHistory address={selectedAccount.address} />
+              <Suspense fallback={<Skeleton className="h-96" />}>
+                <RewardsHistory address={selectedAccount.address} />
+              </Suspense>
             </TabsContent>
           </Tabs>
+        </div>
+
+        <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
+          <Suspense fallback={<Skeleton className="h-96" />}>
+            <ValidatorAnalytics validatorAddress={demoValidatorAddress} />
+          </Suspense>
+
+          <Suspense fallback={<Skeleton className="h-96" />}>
+            <StakingHistory address={demoStakerAddress} />
+          </Suspense>
         </div>
       </div>
     </DashboardLayout>

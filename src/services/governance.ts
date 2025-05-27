@@ -16,9 +16,6 @@ const log = {
 };
 
 
-
-
-
 interface DelegationJSON {
   isDelegating: boolean;
   asDelegating?: {

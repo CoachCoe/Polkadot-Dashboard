@@ -3,21 +3,14 @@
 import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { stakingService, type ValidatorDetails } from '@/services/stakingService';
-import { formatBalance } from '@polkadot/util';
-import {
-  ArrowTrendingUpIcon,
-  UserGroupIcon,
-  BanknotesIcon,
-  ChartBarIcon,
-  MagnifyingGlassIcon
-} from '@heroicons/react/24/outline';
+import { stakingService, type Validator } from '@/services/stakingService';
+import { BanknotesIcon, ChartBarIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 
 interface ValidatorListProps {
 }
 
 export function ValidatorList({}: ValidatorListProps) {
-  const [validators, setValidators] = useState<ValidatorDetails[]>([]);
+  const [validators, setValidators] = useState<Validator[]>([]);
   const [selectedValidators, setSelectedValidators] = useState<string[]>([]);
   const [stakeAmount, setStakeAmount] = useState('');
   const [searchTerm, setSearchTerm] = useState('');
@@ -58,10 +51,7 @@ export function ValidatorList({}: ValidatorListProps) {
 
   const filteredValidators = validators.filter(validator => {
     const searchLower = searchTerm.toLowerCase();
-    return (
-      validator.identity.display.toLowerCase().includes(searchLower) ||
-      validator.address.toLowerCase().includes(searchLower)
-    );
+    return validator.address.toLowerCase().includes(searchLower);
   });
 
   if (isLoading) {
@@ -144,22 +134,11 @@ export function ValidatorList({}: ValidatorListProps) {
             <div className="flex items-start justify-between">
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">
-                  {validator.identity.display || validator.address.slice(0, 8)}
+                  {validator.address.slice(0, 8)}...{validator.address.slice(-6)}
                 </h3>
                 <p className="text-sm text-gray-500">
                   {validator.address}
                 </p>
-                {validator.identity.web && (
-                  <a
-                    href={validator.identity.web}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-sm text-pink-600 hover:text-pink-700"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {validator.identity.web}
-                  </a>
-                )}
               </div>
               <span
                 className={`text-sm px-2 py-1 rounded ${
@@ -178,42 +157,20 @@ export function ValidatorList({}: ValidatorListProps) {
                 <div>
                   <p className="text-sm text-gray-500">Total Stake</p>
                   <p className="font-medium">
-                    {formatBalance(validator.totalStake, { decimals: 10 })} DOT
+                    {validator.totalStake} DOT
                   </p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
                 <ChartBarIcon className="h-5 w-5 text-gray-400" />
                 <div>
-                  <p className="text-sm text-gray-500">Commission</p>
-                  <p className="font-medium">{validator.commission}%</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <UserGroupIcon className="h-5 w-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">Nominators</p>
-                  <p className="font-medium">{validator.nominators}</p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <ArrowTrendingUpIcon className="h-5 w-5 text-gray-400" />
-                <div>
-                  <p className="text-sm text-gray-500">Era Points</p>
-                  <p className="font-medium">
-                    {validator.performance[0]?.points || 0}
-                  </p>
+                  <p className="text-sm text-gray-500">Own Stake</p>
+                  <p className="font-medium">{validator.ownStake} DOT</p>
                 </div>
               </div>
             </div>
           </Card>
         ))}
-
-        {filteredValidators.length === 0 && (
-          <div className="text-center py-12 bg-white rounded-lg">
-            <p className="text-gray-500">No validators found matching your search.</p>
-          </div>
-        )}
       </div>
     </div>
   );
