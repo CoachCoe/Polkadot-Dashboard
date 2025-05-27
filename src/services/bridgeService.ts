@@ -12,6 +12,20 @@ export interface BridgeProvider {
   maximumAmount: string;
   estimatedTime: string;
   fee: string;
+  isThirdParty?: boolean;
+  website?: string;
+  documentation?: string;
+}
+
+export interface BridgeTransaction {
+  id: string;
+  fromChain: string;
+  toChain: string;
+  amount: string;
+  status: 'pending' | 'completed' | 'failed';
+  timestamp: number;
+  txHash: string;
+  bridgeProvider: string;
 }
 
 export interface OnRampProvider {
@@ -32,6 +46,8 @@ export interface BridgeQuote {
   fee: string;
   estimatedTime: string;
   route: string[];
+  provider: string;
+  expectedOutput: string;
 }
 
 export interface OnRampQuote {
@@ -58,17 +74,35 @@ class BridgeService {
       minimumAmount: '1',
       maximumAmount: '10000',
       estimatedTime: '2-5 minutes',
-      fee: '0.5'
+      fee: '0.5',
+      isThirdParty: false,
+      documentation: 'https://wiki.polkadot.network/docs/learn-xcm'
     },
     {
-      id: 'bridge',
-      name: 'Bridge Transfer',
-      description: 'Secure bridge transfers between chains',
-      supportedChains: ['ethereum', 'binance-smart-chain'],
-      minimumAmount: '100',
+      id: 'wormhole',
+      name: 'Wormhole',
+      description: 'Secure and fast cross-chain bridge',
+      supportedChains: ['polkadot', 'ethereum', 'solana', 'binance-smart-chain'],
+      minimumAmount: '10',
       maximumAmount: '1000000',
+      estimatedTime: '15-20 minutes',
+      fee: '0.1%',
+      isThirdParty: true,
+      website: 'https://wormhole.com',
+      documentation: 'https://docs.wormhole.com'
+    },
+    {
+      id: 'multichain',
+      name: 'Multichain',
+      description: 'Cross-chain router protocol',
+      supportedChains: ['polkadot', 'ethereum', 'binance-smart-chain'],
+      minimumAmount: '50',
+      maximumAmount: '500000',
       estimatedTime: '10-30 minutes',
-      fee: '1.0'
+      fee: '0.3%',
+      isThirdParty: true,
+      website: 'https://multichain.org',
+      documentation: 'https://docs.multichain.org'
     }
   ];
 
@@ -126,16 +160,17 @@ class BridgeService {
   async getBridgeQuote(
     fromChain: string,
     toChain: string,
-    amount: string
+    amount: string,
+    providerId?: string
   ): Promise<BridgeQuote> {
     try {
-      // TODO: Implement actual quote fetching from bridge providers
-      const provider = this.bridgeProviders.find(p => 
+      // Find available providers for the chain pair
+      const availableProviders = this.bridgeProviders.filter(p => 
         p.supportedChains.includes(fromChain) && 
         p.supportedChains.includes(toChain)
       );
 
-      if (!provider) {
+      if (availableProviders.length === 0) {
         throw new PolkadotHubError(
           'Bridge route not available',
           ErrorCodes.BRIDGE.UNAVAILABLE,
@@ -143,11 +178,27 @@ class BridgeService {
         );
       }
 
+      // If providerId is specified, use that provider
+      const provider = providerId 
+        ? availableProviders.find(p => p.id === providerId)
+        : availableProviders[0];
+
+      if (!provider) {
+        throw new PolkadotHubError(
+          'Invalid bridge provider',
+          ErrorCodes.BRIDGE.UNAVAILABLE,
+          'The selected bridge provider is not available'
+        );
+      }
+
+      // TODO: Implement actual quote fetching from bridge providers
       return {
         amount,
         fee: provider.fee,
         estimatedTime: provider.estimatedTime,
-        route: [fromChain, toChain]
+        route: [fromChain, toChain],
+        provider: provider.name,
+        expectedOutput: amount // In a real implementation, this would be calculated
       };
     } catch (error) {
       throw new PolkadotHubError(
@@ -158,28 +209,42 @@ class BridgeService {
     }
   }
 
-  async getOnRampQuote(
-    fiatCurrency: string,
-    fiatAmount: string,
-    cryptoCurrency: string = 'DOT'
-  ): Promise<OnRampQuote> {
+  async getTransactionHistory(_address: string): Promise<BridgeTransaction[]> {
     try {
-      // TODO: Implement actual quote fetching from on-ramp providers
-      return {
-        provider: 'Example Provider',
-        fiatCurrency,
-        fiatAmount,
-        cryptoCurrency,
-        cryptoAmount: '0',
-        rate: '0',
-        fee: '0',
-        total: '0'
-      };
+      // TODO: Implement actual transaction history fetching
+      // This would typically involve:
+      // 1. Querying on-chain events
+      // 2. Querying third-party bridge APIs
+      // 3. Combining and formatting the results
+      
+      // For now, return mock data
+      return [
+        {
+          id: '1',
+          fromChain: 'Polkadot',
+          toChain: 'Ethereum',
+          amount: '100 DOT',
+          status: 'completed',
+          timestamp: Date.now() - 3600000,
+          txHash: '0x123...abc',
+          bridgeProvider: 'Wormhole'
+        },
+        {
+          id: '2',
+          fromChain: 'Asset Hub',
+          toChain: 'Acala',
+          amount: '50 DOT',
+          status: 'pending',
+          timestamp: Date.now() - 1800000,
+          txHash: '0x456...def',
+          bridgeProvider: 'XCM'
+        }
+      ];
     } catch (error) {
       throw new PolkadotHubError(
-        'Failed to get on-ramp quote',
-        ErrorCodes.BRIDGE.ESTIMATE_ERROR,
-        'Error fetching on-ramp quote'
+        'Failed to fetch transaction history',
+        ErrorCodes.DATA.NOT_FOUND,
+        'Could not load bridge transaction history'
       );
     }
   }
@@ -188,13 +253,27 @@ class BridgeService {
     fromChain: string,
     toChain: string,
     amount: string,
-    destinationAddress: string,
-    signer: AddressOrPair
+    _destinationAddress: string,
+    signer: AddressOrPair,
+    providerId: string
   ): Promise<string> {
     try {
-      // TODO: Implement actual bridge transfer
+      const provider = this.bridgeProviders.find(p => p.id === providerId);
+      if (!provider) {
+        throw new PolkadotHubError(
+          'Invalid bridge provider',
+          ErrorCodes.BRIDGE.UNAVAILABLE,
+          'The selected bridge provider is not available'
+        );
+      }
+
+      // TODO: Implement actual bridge transfer logic
+      // This would involve:
+      // 1. For XCM: Use Polkadot.js API
+      // 2. For third-party bridges: Integrate with their SDKs/APIs
+      
       const signerAddress = typeof signer === 'string' ? signer : signer.toString();
-      return `Bridge transfer initiated from ${fromChain} (${signerAddress}) to ${toChain} for ${amount} DOT to ${destinationAddress}`;
+      return `Bridge transfer initiated from ${fromChain} (${signerAddress}) to ${toChain} for ${amount} DOT using ${provider.name}`;
     } catch (error) {
       throw new PolkadotHubError(
         'Failed to execute bridge transfer',
@@ -246,22 +325,13 @@ class BridgeService {
         );
       }
 
-      const amountNum = parseFloat(amount);
-      if (isNaN(amountNum)) {
-        throw new PolkadotHubError(
-          'Invalid amount',
-          ErrorCodes.VALIDATION.INVALID_AMOUNT,
-          'Please provide a valid amount'
-        );
-      }
-
-      // TODO: Implement actual on-ramp transaction
-      return `On-ramp transaction initiated: ${amount} ${fiatCurrency} to ${cryptoCurrency} via ${provider} to ${address}`;
+      // TODO: Implement actual on-ramp integration
+      return `On-ramp transaction initiated: ${amount} ${fiatCurrency} to ${cryptoCurrency} via ${selectedProvider.name}`;
     } catch (error) {
       throw new PolkadotHubError(
         'Failed to execute on-ramp transaction',
         ErrorCodes.BRIDGE.ERROR,
-        'Error executing on-ramp transaction'
+        'Error processing on-ramp transaction'
       );
     }
   }

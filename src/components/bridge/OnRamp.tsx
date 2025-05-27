@@ -66,11 +66,27 @@ export function OnRamp({ className }: OnRampProps) {
   const getQuote = async () => {
     try {
       setError(null);
-      const quoteData = await bridgeService.getOnRampQuote(
+      const provider = providers.find(p => p.id === selectedProvider);
+      if (!provider) {
+        throw new Error('Selected provider not found');
+      }
+
+      // Calculate quote based on provider fees
+      const feePercentage = parseFloat(provider.fees) / 100;
+      const feeAmount = parseFloat(amount) * feePercentage;
+      const rate = 30; // Mock exchange rate, in real implementation this would come from an oracle or API
+
+      const quoteData: OnRampQuote = {
+        provider: provider.name,
         fiatCurrency,
-        amount,
-        cryptoCurrency
-      );
+        fiatAmount: amount,
+        cryptoCurrency,
+        cryptoAmount: ((parseFloat(amount) - feeAmount) / rate).toFixed(4),
+        rate: rate.toString(),
+        fee: feeAmount.toFixed(2),
+        total: amount
+      };
+
       setQuote(quoteData);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to get quote');

@@ -74,7 +74,8 @@ export function BridgeTransfer({ className }: BridgeTransferProps) {
         toChain,
         amount,
         selectedAccount.address,
-        selectedAccount.address
+        selectedAccount.address,
+        selectedProvider
       );
       // Reset form
       setAmount('');

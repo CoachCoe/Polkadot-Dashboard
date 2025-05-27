@@ -1,35 +1,51 @@
+'use client';
+
 import React from 'react';
-import { DashboardLayout } from '@/components/layouts/DashboardLayout';
+import { useSession } from 'next-auth/react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
+import { BridgeDirectory } from '@/components/bridge/BridgeDirectory';
+import { CrossChainSwap } from '@/components/bridge/CrossChainSwap';
+import { TransactionHistory } from '@/components/bridge/TransactionHistory';
 import { BridgeTransfer } from '@/components/bridge/BridgeTransfer';
 import { OnRamp } from '@/components/bridge/OnRamp';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 
 export default function BridgePage() {
+  const { data: session } = useSession();
+  const [selectedBridge, setSelectedBridge] = React.useState<string | undefined>();
+
   return (
-    <DashboardLayout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Bridge & Buy</h1>
-          <p className="mt-2 text-gray-600">
-            Transfer tokens between chains or buy crypto with fiat currency.
-          </p>
-        </div>
+    <div className="container mx-auto px-4 py-8">
+      <h1 className="text-3xl font-bold mb-8">Bridge & Transfer</h1>
 
-        <Tabs defaultValue="bridge">
-          <TabsList>
-            <TabsTrigger value="bridge">Bridge Transfer</TabsTrigger>
-            <TabsTrigger value="onramp">Buy Crypto</TabsTrigger>
-          </TabsList>
+      <Tabs defaultValue="directory" className="space-y-6">
+        <TabsList>
+          <TabsTrigger value="directory">Bridge Directory</TabsTrigger>
+          <TabsTrigger value="swap">Cross-Chain Swap</TabsTrigger>
+          <TabsTrigger value="transfer">Bridge Transfer</TabsTrigger>
+          <TabsTrigger value="onramp">Buy Crypto</TabsTrigger>
+          <TabsTrigger value="history">Transaction History</TabsTrigger>
+        </TabsList>
 
-          <TabsContent value="bridge" className="mt-6">
-            <BridgeTransfer />
-          </TabsContent>
+        <TabsContent value="directory">
+          <BridgeDirectory onSelectBridge={setSelectedBridge} />
+        </TabsContent>
 
-          <TabsContent value="onramp" className="mt-6">
-            <OnRamp />
-          </TabsContent>
-        </Tabs>
-      </div>
-    </DashboardLayout>
+        <TabsContent value="swap">
+          <CrossChainSwap bridgeId={selectedBridge} />
+        </TabsContent>
+
+        <TabsContent value="transfer">
+          <BridgeTransfer />
+        </TabsContent>
+
+        <TabsContent value="onramp">
+          <OnRamp />
+        </TabsContent>
+
+        <TabsContent value="history">
+          <TransactionHistory address={session?.user?.address} />
+        </TabsContent>
+      </Tabs>
+    </div>
   );
 } 
