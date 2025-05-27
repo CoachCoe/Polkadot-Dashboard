@@ -4,8 +4,6 @@ import { TransactionHistory } from '@/components/dashboard/TransactionHistory';
 import { StakingRewards } from '@/components/dashboard/StakingRewards';
 import { Skeleton } from '@/components/ui/Skeleton';
 
-export const dynamic = 'force-dynamic';
-
 export default function DashboardPage() {
   return (
     <div className="container mx-auto py-8 space-y-8">
