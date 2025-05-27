@@ -94,7 +94,7 @@ export function CrossChainSwap({ bridgeId }: CrossChainSwapProps) {
             <Select
               value={fromChain}
               onValueChange={setFromChain}
-              options={chains}
+              items={chains}
               placeholder="Select source chain"
               disabled={isLoading}
             />
@@ -105,7 +105,7 @@ export function CrossChainSwap({ bridgeId }: CrossChainSwapProps) {
             <Select
               value={toChain}
               onValueChange={setToChain}
-              options={chains}
+              items={chains}
               placeholder="Select destination chain"
               disabled={isLoading}
             />

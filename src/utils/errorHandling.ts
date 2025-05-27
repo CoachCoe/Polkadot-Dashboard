@@ -17,7 +17,14 @@ export const ErrorCodes = {
     SIGNATURE_FAILED: 'WALLET_SIGNATURE_FAILED' as const,
     REJECTED: 'WALLET_REJECTED' as const,
     EXTENSION_NOT_FOUND: 'WALLET_EXTENSION_NOT_FOUND' as const,
-    INVALID_ADDRESS: 'WALLET_INVALID_ADDRESS' as const
+    INVALID_ADDRESS: 'WALLET_INVALID_ADDRESS' as const,
+    TRANSACTION_FAILED: 'WALLET_TRANSACTION_FAILED' as const,
+    INSUFFICIENT_BALANCE: 'WALLET_INSUFFICIENT_BALANCE' as const,
+    NETWORK_ERROR: 'WALLET_NETWORK_ERROR' as const,
+    TIMEOUT: 'WALLET_TIMEOUT' as const,
+    USER_REJECTED: 'WALLET_USER_REJECTED' as const,
+    UNSUPPORTED_CHAIN: 'WALLET_UNSUPPORTED_CHAIN' as const,
+    WRONG_NETWORK: 'WALLET_WRONG_NETWORK' as const
   },
 
   // Environment errors
@@ -44,7 +51,10 @@ export const ErrorCodes = {
     AMOUNT_TOO_HIGH: 'AMOUNT_TOO_HIGH' as const,
     ESTIMATE_ERROR: 'BRIDGE_ESTIMATE_ERROR' as const,
     TRANSFER_ERROR: 'BRIDGE_TRANSFER_ERROR' as const,
-    QUOTE_ERROR: 'BRIDGE_QUOTE_ERROR' as const
+    QUOTE_ERROR: 'BRIDGE_QUOTE_ERROR' as const,
+    TRANSFER_FAILED: 'BRIDGE_TRANSFER_FAILED' as const,
+    INSUFFICIENT_BALANCE: 'BRIDGE_INSUFFICIENT_BALANCE' as const,
+    UNSUPPORTED_TOKEN: 'BRIDGE_UNSUPPORTED_TOKEN' as const
   },
 
   // Network errors
@@ -77,7 +87,7 @@ export const ErrorCodes = {
     INVALID_ADDRESS: 'INVALID_ADDRESS' as const,
     INVALID_AMOUNT: 'INVALID_AMOUNT' as const,
     INVALID_CHAIN: 'INVALID_CHAIN' as const,
-    INVALID_PARAMETER: 'INVALID_PARAMETER' as const,
+    INVALID_PARAMETER: 'VALIDATION_INVALID_PARAMETER' as const,
     INVALID_STATE: 'INVALID_STATE' as const,
     INVALID_INFO: 'INVALID_INFO' as const,
     INVALID_INDEX: 'INVALID_INDEX' as const,
@@ -86,7 +96,8 @@ export const ErrorCodes = {
     INVALID_CONVICTION: 'INVALID_CONVICTION' as const,
     INVALID_PREIMAGE: 'INVALID_PREIMAGE' as const,
     INVALID_ID: 'INVALID_ID' as const,
-    INVALID_RECIPIENT: 'INVALID_RECIPIENT' as const
+    INVALID_RECIPIENT: 'INVALID_RECIPIENT' as const,
+    MISSING_PARAMETER: 'VALIDATION_MISSING_PARAMETER' as const
   },
 
   // Authentication errors
@@ -127,7 +138,9 @@ export const ErrorCodes = {
   API: {
     ERROR: 'API_ERROR' as const,
     REQUEST_FAILED: 'API_REQUEST_FAILED' as const,
-    NETWORK_ERROR: 'API_NETWORK_ERROR' as const
+    NETWORK_ERROR: 'API_NETWORK_ERROR' as const,
+    TIMEOUT: 'API_TIMEOUT' as const,
+    INVALID_RESPONSE: 'API_INVALID_RESPONSE' as const
   },
 
   // WebSocket errors
@@ -147,7 +160,9 @@ export const ErrorCodes = {
     VALIDATOR_ERROR: 'STAKING_VALIDATOR_ERROR' as const,
     NOMINATION_ERROR: 'STAKING_NOMINATION_ERROR' as const,
     UNBONDING_ERROR: 'STAKING_UNBONDING_ERROR' as const,
-    WITHDRAWAL_ERROR: 'STAKING_WITHDRAWAL_ERROR' as const
+    WITHDRAWAL_ERROR: 'STAKING_WITHDRAWAL_ERROR' as const,
+    INSUFFICIENT_BALANCE: 'STAKING_INSUFFICIENT_BALANCE' as const,
+    ALREADY_NOMINATED: 'STAKING_ALREADY_NOMINATED' as const
   },
 
   // Governance errors
@@ -169,7 +184,19 @@ export const ErrorCodes = {
     STATS_ERROR: 'PORTFOLIO_STATS_ERROR' as const,
     BALANCE_ERROR: 'PORTFOLIO_BALANCE_ERROR' as const,
     TOKEN_ERROR: 'PORTFOLIO_TOKEN_ERROR' as const,
-    TRANSACTION_ERROR: 'PORTFOLIO_TRANSACTION_ERROR' as const
+    TRANSACTION_ERROR: 'PORTFOLIO_TRANSACTION_ERROR' as const,
+    FETCH_ERROR: 'PORTFOLIO_FETCH_ERROR' as const,
+    UPDATE_ERROR: 'PORTFOLIO_UPDATE_ERROR' as const
+  },
+
+  // OnRamp errors
+  ONRAMP: {
+    QUOTE_ERROR: 'ONRAMP_QUOTE_ERROR' as const,
+    TRANSACTION_ERROR: 'ONRAMP_TRANSACTION_ERROR' as const,
+    PROVIDER_ERROR: 'ONRAMP_PROVIDER_ERROR' as const,
+    UNSUPPORTED_REGION: 'ONRAMP_UNSUPPORTED_REGION' as const,
+    PAYMENT_FAILED: 'ONRAMP_PAYMENT_FAILED' as const,
+    KYC_REQUIRED: 'ONRAMP_KYC_REQUIRED' as const
   }
 } as const;
 
@@ -202,10 +229,18 @@ const SAFE_ERROR_MESSAGES: Record<ErrorCode, string> = {
   'WALLET_REJECTED': 'Transaction rejected by user',
   'WALLET_EXTENSION_NOT_FOUND': 'Wallet extension not found',
   'WALLET_INVALID_ADDRESS': 'Invalid wallet address',
+  'WALLET_TRANSACTION_FAILED': 'Transaction failed',
+  'WALLET_INSUFFICIENT_BALANCE': 'Insufficient balance',
+  'WALLET_NETWORK_ERROR': 'Network connection failed',
+  'WALLET_TIMEOUT': 'Transaction timed out',
+  'WALLET_USER_REJECTED': 'Transaction rejected by user',
+  'WALLET_UNSUPPORTED_CHAIN': 'Unsupported chain',
+  'WALLET_WRONG_NETWORK': 'Wrong network',
   
   // Environment errors
   'ENVIRONMENT_ERROR': 'Environment error',
   'SERVER_ERROR': 'Server error',
+  'ENV_ERROR': 'Environment error',
 
   // Transaction errors
   'TRANSACTION_FAILED': 'Transaction failed',
@@ -215,41 +250,45 @@ const SAFE_ERROR_MESSAGES: Record<ErrorCode, string> = {
   'TRANSACTION_SUCCESS': 'Transaction successful',
 
   // Bridge errors
-  'BRIDGE_UNAVAILABLE': 'Bridge unavailable',
+  'BRIDGE_UNAVAILABLE': 'Bridge service unavailable',
   'BRIDGE_ERROR': 'Bridge operation failed',
   'INVALID_DESTINATION': 'Invalid destination address',
-  'AMOUNT_TOO_LOW': 'Amount below minimum',
-  'AMOUNT_TOO_HIGH': 'Amount above maximum',
-  'BRIDGE_ESTIMATE_ERROR': 'Failed to estimate transfer fees',
+  'AMOUNT_TOO_LOW': 'Amount is too low',
+  'AMOUNT_TOO_HIGH': 'Amount is too high',
+  'BRIDGE_ESTIMATE_ERROR': 'Failed to estimate bridge transaction',
   'BRIDGE_TRANSFER_ERROR': 'Bridge transfer failed',
   'BRIDGE_QUOTE_ERROR': 'Failed to get bridge quote',
+  'BRIDGE_TRANSFER_FAILED': 'Bridge transfer failed',
+  'BRIDGE_INSUFFICIENT_BALANCE': 'Insufficient balance for bridge',
+  'BRIDGE_UNSUPPORTED_TOKEN': 'Token not supported by bridge',
 
   // Network errors
-  'NETWORK_ERROR': 'Network connection failed',
-  'NETWORK_CONNECTION_ERROR': 'Network connection error',
-  'NETWORK_TIMEOUT': 'Network timeout',
-  'NETWORK_API_ERROR': 'Network API error',
+  'NETWORK_ERROR': 'Network error',
+  'NETWORK_CONNECTION_ERROR': 'Network connection failed',
+  'NETWORK_TIMEOUT': 'Network request timed out',
+  'NETWORK_API_ERROR': 'API request failed',
 
   // Data errors
-  'INVALID_DATA': 'Invalid data received',
+  'INVALID_DATA': 'Invalid data',
   'DATA_NOT_FOUND': 'Data not found',
   'PARSE_ERROR': 'Failed to parse data',
-  'PROJECT_STATS_ERROR': 'Failed to fetch project statistics',
-  'PROJECT_FILTER_ERROR': 'Failed to apply project filters',
+  'PROJECT_STATS_ERROR': 'Failed to load project stats',
+  'PROJECT_FILTER_ERROR': 'Failed to filter projects',
   'ECOSYSTEM_LOAD_ERROR': 'Failed to load ecosystem data',
-  'PROJECT_FETCH_ERROR': 'Failed to fetch project data',
-  'STAKING_ERROR': 'Failed to load staking information',
+  'PROJECT_FETCH_ERROR': 'Failed to fetch project',
+  'STAKING_ERROR': 'Staking operation failed',
   'INVALID_FORMAT': 'Invalid data format',
   'DATA_STALE': 'Data is stale',
   'CATEGORY_ERROR': 'Category error',
-  'BALANCE_ERROR': 'Balance error',
+  'BALANCE_ERROR': 'Failed to get balance',
   'TRANSACTION_ERROR': 'Transaction error',
 
   // Validation errors
-  'INVALID_ADDRESS': 'Invalid address format',
+  'INVALID_ADDRESS': 'Invalid address',
   'INVALID_AMOUNT': 'Invalid amount',
-  'INVALID_CHAIN': 'Invalid chain selection',
-  'INVALID_PARAMETER': 'Invalid parameter',
+  'INVALID_CHAIN': 'Invalid chain',
+  'VALIDATION_INVALID_PARAMETER': 'Invalid parameter',
+  'VALIDATION_MISSING_PARAMETER': 'Missing required parameter',
   'INVALID_STATE': 'Invalid state',
   'INVALID_INFO': 'Invalid information',
   'INVALID_INDEX': 'Invalid index',
@@ -269,63 +308,76 @@ const SAFE_ERROR_MESSAGES: Record<ErrorCode, string> = {
   'AUTH_SESSION_EXPIRED': 'Session expired',
   'AUTH_MISSING_FIELDS': 'Missing required fields',
   'AUTH_MISSING_ADDRESS': 'Missing wallet address',
-  'AUTH_CHALLENGE_NOT_FOUND': 'Challenge not found',
-  'AUTH_CHALLENGE_EXPIRED': 'Challenge expired',
+  'AUTH_CHALLENGE_NOT_FOUND': 'Authentication challenge not found',
+  'AUTH_CHALLENGE_EXPIRED': 'Authentication challenge expired',
   'AUTH_VERIFICATION_FAILED': 'Verification failed',
   'AUTH_SESSION_CREATION_FAILED': 'Failed to create session',
   'NOT_AUTHENTICATED': 'Not authenticated',
 
   // Success messages
-  'VOTE_SUCCESS': 'Vote submitted successfully',
+  'VOTE_SUCCESS': 'Vote successful',
   'DELEGATE_SUCCESS': 'Delegation successful',
   'UNDELEGATE_SUCCESS': 'Undelegation successful',
   'CONNECTION_SUCCESS': 'Connection successful',
 
   // Generic errors
-  'UNKNOWN_ERROR': 'Unknown error occurred',
+  'UNKNOWN_ERROR': 'An unknown error occurred',
   'NOT_IMPLEMENTED': 'Feature not implemented',
   'NOT_SUPPORTED': 'Operation not supported',
   'NOT_AUTHORIZED': 'Not authorized',
   'NOT_FOUND': 'Resource not found',
 
   // API errors
-  'API_ERROR': 'API error occurred',
+  'API_ERROR': 'API error',
   'API_REQUEST_FAILED': 'API request failed',
   'API_NETWORK_ERROR': 'API network error',
+  'API_TIMEOUT': 'API request timed out',
+  'API_INVALID_RESPONSE': 'Invalid API response',
 
   // WebSocket errors
-  'WEBSOCKET_CONNECTION_ERROR': 'WebSocket connection error',
+  'WEBSOCKET_CONNECTION_ERROR': 'WebSocket connection failed',
   'WEBSOCKET_NOT_CONNECTED': 'WebSocket not connected',
-  'WEBSOCKET_MAX_RETRIES_REACHED': 'Maximum reconnection attempts reached',
-  'WEBSOCKET_SUBSCRIPTION_ERROR': 'WebSocket subscription error',
+  'WEBSOCKET_MAX_RETRIES_REACHED': 'WebSocket max retries reached',
+  'WEBSOCKET_SUBSCRIPTION_ERROR': 'WebSocket subscription failed',
 
   // Staking errors
-  'STAKING_NOMINATION_FAILED': 'Nomination failed',
-  'STAKING_UNBONDING_FAILED': 'Unbonding failed',
-  'STAKING_WITHDRAWAL_FAILED': 'Withdrawal failed',
-  'STAKING_POOL_ERROR': 'Failed to interact with staking pool',
-  'STAKING_VALIDATOR_ERROR': 'Failed to fetch validator information',
-  'STAKING_NOMINATION_ERROR': 'Failed to submit nomination',
-  'STAKING_UNBONDING_ERROR': 'Failed to unbond tokens',
-  'STAKING_WITHDRAWAL_ERROR': 'Failed to withdraw tokens',
+  'STAKING_POOL_ERROR': 'Staking pool error',
+  'STAKING_VALIDATOR_ERROR': 'Validator error',
+  'STAKING_NOMINATION_ERROR': 'Nomination error',
+  'STAKING_UNBONDING_ERROR': 'Unbonding error',
+  'STAKING_WITHDRAWAL_ERROR': 'Withdrawal error',
+  'STAKING_INSUFFICIENT_BALANCE': 'Insufficient balance for staking',
+  'STAKING_ALREADY_NOMINATED': 'Already nominated',
 
   // Governance errors
   'GOVERNANCE_VOTE_FAILED': 'Vote failed',
   'GOVERNANCE_PROPOSAL_FAILED': 'Proposal failed',
   'GOVERNANCE_DELEGATION_FAILED': 'Delegation failed',
-  'GOVERNANCE_VOTE_ERROR': 'Failed to submit vote',
-  'GOVERNANCE_PROPOSAL_ERROR': 'Failed to submit proposal',
-  'GOVERNANCE_REFERENDUM_ERROR': 'Failed to fetch referendum information',
-  'GOVERNANCE_DELEGATION_ERROR': 'Failed to delegate vote',
-
-  // Environment error
-  'ENV_ERROR': 'Environment error',
+  'GOVERNANCE_VOTE_ERROR': 'Vote error',
+  'GOVERNANCE_PROPOSAL_ERROR': 'Proposal error',
+  'GOVERNANCE_REFERENDUM_ERROR': 'Referendum error',
+  'GOVERNANCE_DELEGATION_ERROR': 'Delegation error',
 
   // Portfolio errors
-  'PORTFOLIO_STATS_ERROR': 'Failed to fetch portfolio statistics',
-  'PORTFOLIO_BALANCE_ERROR': 'Failed to fetch portfolio balance',
-  'PORTFOLIO_TOKEN_ERROR': 'Failed to fetch token information',
-  'PORTFOLIO_TRANSACTION_ERROR': 'Failed to fetch transaction history'
+  'PORTFOLIO_STATS_ERROR': 'Failed to load portfolio stats',
+  'PORTFOLIO_BALANCE_ERROR': 'Failed to load portfolio balance',
+  'PORTFOLIO_TOKEN_ERROR': 'Failed to load token data',
+  'PORTFOLIO_TRANSACTION_ERROR': 'Portfolio transaction failed',
+  'PORTFOLIO_FETCH_ERROR': 'Failed to fetch portfolio',
+  'PORTFOLIO_UPDATE_ERROR': 'Failed to update portfolio',
+
+  // OnRamp errors
+  'ONRAMP_QUOTE_ERROR': 'Failed to get on-ramp quote',
+  'ONRAMP_TRANSACTION_ERROR': 'On-ramp transaction failed',
+  'ONRAMP_PROVIDER_ERROR': 'On-ramp provider error',
+  'ONRAMP_UNSUPPORTED_REGION': 'Region not supported',
+  'ONRAMP_PAYMENT_FAILED': 'Payment failed',
+  'ONRAMP_KYC_REQUIRED': 'KYC verification required',
+
+  // Staking errors
+  'STAKING_NOMINATION_FAILED': 'Nomination failed',
+  'STAKING_UNBONDING_FAILED': 'Unbonding failed',
+  'STAKING_WITHDRAWAL_FAILED': 'Withdrawal failed'
 };
 
 export class PolkadotHubError extends Error {
