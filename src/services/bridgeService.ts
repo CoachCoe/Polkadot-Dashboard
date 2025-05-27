@@ -2,7 +2,7 @@ import { ApiPromise } from '@polkadot/api';
 import { polkadotService } from './polkadot';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import type { AddressOrPair } from '@polkadot/api/types';
-import { formatBalance } from '@/utils/formatters';
+import { formatBalance } from '@polkadot/util';
 
 export interface BridgeProvider {
   id: string;
