@@ -1,6 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
+import { v4 as uuidv4 } from 'uuid';
 import { useWalletStore } from '@/store/useWalletStore';
 import { Button } from '@/components/ui/Button';
 import { Textarea } from '@/components/ui/Textarea';
@@ -13,130 +14,105 @@ interface Comment {
   content: string;
   timestamp: number;
   authorName?: string;
-  authorAvatar?: string | null;
+  authorAvatar?: string;
 }
 
 interface ReferendumCommentsProps {
-  referendumId: number;
+  referendumId: string;
 }
 
 export function ReferendumComments({ referendumId }: ReferendumCommentsProps) {
-  const { selectedAccount } = useWalletStore();
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
   const [isLoading, setIsLoading] = useState(true);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const { selectedAccount } = useWalletStore();
 
   useEffect(() => {
     loadComments();
   }, [referendumId]);
 
-  async function loadComments() {
+  const loadComments = () => {
     try {
-      setIsLoading(true);
-      const response = await fetch(`/api/governance/referenda/${referendumId}/comments`);
-      if (!response.ok) throw new Error('Failed to load comments');
-      const data = await response.json();
-      setComments(data);
-    } catch (error) {
-      console.error('Failed to load comments:', error);
+      const storedComments = localStorage.getItem(`comments:${referendumId}`);
+      setComments(storedComments ? JSON.parse(storedComments) : []);
+    } catch (err) {
+      setError('Failed to load comments');
+      console.error(err);
     } finally {
       setIsLoading(false);
     }
-  }
+  };
 
-  async function handleSubmitComment() {
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
     if (!selectedAccount || !newComment.trim()) return;
 
     try {
-      setIsSubmitting(true);
-      const response = await fetch(`/api/governance/referenda/${referendumId}/comments`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          content: newComment,
-          author: selectedAccount.address,
-        }),
-      });
+      const comment: Comment = {
+        id: uuidv4(),
+        author: selectedAccount.address,
+        content: newComment.trim(),
+        timestamp: Date.now(),
+      };
 
-      if (!response.ok) throw new Error('Failed to submit comment');
-
-      const comment = await response.json();
-      setComments([...comments, comment]);
+      const updatedComments = [...comments, comment];
+      localStorage.setItem(`comments:${referendumId}`, JSON.stringify(updatedComments));
+      setComments(updatedComments);
       setNewComment('');
-    } catch (error) {
-      console.error('Failed to submit comment:', error);
-    } finally {
-      setIsSubmitting(false);
+    } catch (err) {
+      setError('Failed to add comment');
+      console.error(err);
     }
-  }
+  };
 
   if (isLoading) {
-    return (
-      <div className="space-y-4 animate-pulse">
-        {[...Array(3)].map((_, i) => (
-          <div key={i} className="flex space-x-4">
-            <div className="w-10 h-10 bg-gray-200 rounded-full" />
-            <div className="flex-1 space-y-2">
-              <div className="h-4 bg-gray-200 rounded w-1/4" />
-              <div className="h-4 bg-gray-200 rounded w-3/4" />
-            </div>
-          </div>
-        ))}
-      </div>
-    );
+    return <div className="animate-pulse">Loading comments...</div>;
+  }
+
+  if (error) {
+    return <div className="text-red-500">{error}</div>;
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
+      <h3 className="text-lg font-semibold">Comments</h3>
+      
       <div className="space-y-4">
         {comments.map((comment) => (
-          <div key={comment.id} className="flex space-x-4">
-            <Avatar
-              src={comment.authorAvatar || null}
-              alt={comment.authorName || comment.author}
-              fallback={comment.authorName?.[0] || comment.author.slice(0, 2)}
-            />
-            <div className="flex-1">
-              <div className="flex items-center space-x-2">
-                <span className="font-medium">
-                  {comment.authorName || `${comment.author.slice(0, 6)}...${comment.author.slice(-4)}`}
-                </span>
-                <span className="text-sm text-gray-500">
-                  {formatTimeAgo(new Date(comment.timestamp))}
-                </span>
-              </div>
-              <p className="mt-1 text-gray-700">{comment.content}</p>
+          <div key={comment.id} className="bg-white p-4 rounded-lg shadow">
+            <div className="flex items-center gap-2 mb-2">
+              <span className="font-medium text-gray-700">
+                {comment.author.slice(0, 6)}...{comment.author.slice(-4)}
+              </span>
+              <span className="text-sm text-gray-500">
+                {new Date(comment.timestamp).toLocaleString()}
+              </span>
             </div>
+            <p className="text-gray-800">{comment.content}</p>
           </div>
         ))}
-
-        {comments.length === 0 && (
-          <p className="text-center text-gray-500 py-4">
-            No comments yet. Be the first to comment!
-          </p>
-        )}
       </div>
 
-      {selectedAccount && (
-        <div className="space-y-4">
-          <Textarea
+      {selectedAccount ? (
+        <form onSubmit={handleSubmit} className="space-y-2">
+          <textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
-            placeholder="Add your comment..."
-            className="w-full min-h-[100px]"
+            className="w-full p-2 border rounded-lg"
+            placeholder="Add a comment..."
+            rows={3}
           />
-          <div className="flex justify-end">
-            <Button
-              onClick={handleSubmitComment}
-              disabled={!newComment.trim() || isSubmitting}
-            >
-              {isSubmitting ? 'Submitting...' : 'Submit Comment'}
-            </Button>
-          </div>
-        </div>
+          <button
+            type="submit"
+            disabled={!newComment.trim()}
+            className="px-4 py-2 bg-blue-500 text-white rounded-lg disabled:opacity-50"
+          >
+            Post Comment
+          </button>
+        </form>
+      ) : (
+        <p className="text-gray-500">Connect your wallet to comment</p>
       )}
     </div>
   );

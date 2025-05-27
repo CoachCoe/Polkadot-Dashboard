@@ -4,7 +4,7 @@ const webpack = require('webpack');
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  output: 'standalone',
+  output: 'export',
   experimental: {
     optimizePackageImports: ['@polkadot/api', '@polkadot/extension-dapp'],
   },
