@@ -7,7 +7,8 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['@polkadot/api', '@polkadot/extension-dapp'],
   },
-  output: 'standalone',
+  output: 'export',
+  distDir: 'out',
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
