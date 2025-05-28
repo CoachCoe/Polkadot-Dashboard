@@ -1,44 +1,32 @@
 'use client';
 
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
 
 interface AuthContextType {
   isAuthenticated: boolean;
   error: Error | null;
-  connect: () => Promise<void>;
-  disconnect: () => void;
-  clearError: () => void;
+  login: () => Promise<void>;
+  logout: () => void;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType | null>(null);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { selectedAccount, connect: connectWallet, disconnect: disconnectWallet, error: walletError } = useWalletStore();
+  const { selectedAccount, loadAccounts, setSelectedAccount } = useWalletStore();
   const [error, setError] = useState<Error | null>(null);
-  const [authError, setAuthError] = useState<Error | null>(null);
 
-  useEffect(() => {
-    // Update error state when wallet or auth errors change
-    setError(walletError || authError);
-  }, [walletError, authError]);
-
-  const connect = async () => {
+  const login = async () => {
     try {
-      await connectWallet();
+      setError(null);
+      await loadAccounts();
     } catch (err) {
-      setAuthError(err instanceof Error ? err : new Error('Failed to connect'));
+      setError(err instanceof Error ? err : new Error('Failed to authenticate'));
     }
   };
 
-  const disconnect = () => {
-    disconnectWallet();
-    setAuthError(null);
-  };
-
-  const clearError = () => {
-    setError(null);
-    setAuthError(null);
+  const logout = () => {
+    setSelectedAccount(null);
   };
 
   return (
@@ -46,9 +34,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       value={{
         isAuthenticated: !!selectedAccount,
         error,
-        connect,
-        disconnect,
-        clearError
+        login,
+        logout,
       }}
     >
       {children}
@@ -58,7 +45,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (context === undefined) {
+  if (!context) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;

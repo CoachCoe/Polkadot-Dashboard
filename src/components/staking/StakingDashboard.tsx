@@ -9,6 +9,7 @@ import { Input } from '@/components/ui/Input';
 import { ValidatorBrowser } from './ValidatorBrowser';
 import { formatBalance } from '@polkadot/util';
 import { ArrowPathIcon, ClockIcon } from '@heroicons/react/24/outline';
+import { web3Enable, web3FromAddress } from '@polkadot/extension-dapp';
 
 export function StakingDashboard() {
   const { selectedAccount } = useWalletStore();
@@ -63,43 +64,53 @@ export function StakingDashboard() {
     try {
       setIsLoading(true);
       setError(null);
+
+      await web3Enable('Polkadot Dashboard');
+      const injector = await web3FromAddress(selectedAccount.address);
       
       // First bond the tokens
       const bondTx = await polkadotApiService.bond(selectedAccount, stakeAmount);
-      await bondTx.signAndSend(selectedAccount.address);
+      await bondTx.signAndSend(selectedAccount.address, { signer: injector.signer });
 
       // Then nominate validators if selected
       if (selectedValidators.length > 0) {
         const nominateTx = await polkadotApiService.nominate(
-          selectedAccount,
           selectedValidators.map(v => v.address)
         );
-        await nominateTx.signAndSend(selectedAccount.address);
+        await nominateTx.signAndSend(selectedAccount.address, { signer: injector.signer });
       }
 
       void loadStakingInfo();
       void loadNominatorInfo();
+      setStakeAmount('');
+      setSelectedValidators([]);
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to stake');
+      console.error('Failed to stake:', err);
+      setError(err instanceof Error ? err.message : 'Failed to stake tokens');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleUnstake = async () => {
+  const handleUnbond = async () => {
     if (!selectedAccount || !stakeAmount) return;
 
     try {
       setIsLoading(true);
       setError(null);
+
+      await web3Enable('Polkadot Dashboard');
+      const injector = await web3FromAddress(selectedAccount.address);
       
-      const tx = await polkadotApiService.unbond(selectedAccount, stakeAmount);
-      await tx.signAndSend(selectedAccount.address);
+      const unbondTx = await polkadotApiService.unbond(stakeAmount);
+      await unbondTx.signAndSend(selectedAccount.address, { signer: injector.signer });
 
       void loadStakingInfo();
       void loadNominatorInfo();
+      setStakeAmount('');
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to unstake');
+      console.error('Failed to unbond:', err);
+      setError(err instanceof Error ? err.message : 'Failed to unbond tokens');
     } finally {
       setIsLoading(false);
     }
@@ -108,7 +119,7 @@ export function StakingDashboard() {
   if (!selectedAccount) {
     return (
       <Card className="p-6">
-        <p className="text-center text-gray-500">Please connect your wallet to view staking information.</p>
+        <p className="text-gray-500">Please connect your wallet to start staking.</p>
       </Card>
     );
   }
@@ -191,8 +202,8 @@ export function StakingDashboard() {
             <Button onClick={() => void handleStake()} disabled={isLoading || !stakeAmount}>
               Stake
             </Button>
-            <Button onClick={() => void handleUnstake()} disabled={isLoading || !stakeAmount} variant="outline">
-              Unstake
+            <Button onClick={() => void handleUnbond()} disabled={isLoading || !stakeAmount} variant="outline">
+              Unbond
             </Button>
           </div>
 

@@ -18,6 +18,7 @@ import type {
   Track, 
   DelegationInfo 
 } from '@/types/governance';
+import { InjectedAccount } from '@polkadot/extension-inject/types';
 
 // Helper types for runtime type checking
 type StakingModule = NonNullable<ApiPromise['query']['staking']>;
@@ -73,7 +74,7 @@ export enum ErrorCode {
 class PolkadotApiService {
   private static instance: PolkadotApiService;
   private api: ApiPromise | null = null;
-  private wsEndpoint: string;
+  private readonly wsEndpoint = process.env.NEXT_PUBLIC_WS_ENDPOINT || 'wss://rpc.polkadot.io';
   private chainInfo: ChainInfo | null = null;
   private reconnectAttempts: number = 0;
   private readonly maxReconnectAttempts: number = 5;
@@ -81,7 +82,6 @@ class PolkadotApiService {
   private selectedAccount: WalletAccount | null = null;
 
   private constructor() {
-    this.wsEndpoint = process.env.NEXT_PUBLIC_POLKADOT_RPC || 'wss://rpc.polkadot.io';
     log.info('Initializing PolkadotApiService');
   }
 
@@ -92,16 +92,10 @@ class PolkadotApiService {
     return PolkadotApiService.instance;
   }
 
-  private async getApi(): Promise<ApiPromise> {
-    if (!this.api || !this.api.isConnected) {
-      await this.connect();
-    }
+  private async ensureApi(): Promise<ApiPromise> {
     if (!this.api) {
-      throw new PolkadotHubError(
-        'API not initialized',
-        ErrorCodes.API.ERROR,
-        'Failed to initialize Polkadot API'
-      );
+      const provider = new WsProvider(this.wsEndpoint);
+      this.api = await ApiPromise.create({ provider });
     }
     return this.api;
   }
@@ -307,7 +301,7 @@ class PolkadotApiService {
     log.info('Initializing chain information...');
 
     try {
-      const api = await this.getApi();
+      const api = await this.ensureApi();
       
       if (!api.rpc.system?.chain || !api.registry?.getChainProperties || !api.consts.system?.ss58Prefix) {
         throw new PolkadotHubError(
@@ -427,7 +421,7 @@ class PolkadotApiService {
     log.info(`Getting balance for address: ${address}`);
 
     try {
-      const api = await this.getApi();
+      const api = await this.ensureApi();
       if (!api.query.system?.account) {
         throw new PolkadotHubError(
           'System account query not available',
@@ -501,7 +495,7 @@ class PolkadotApiService {
 
   async getStakingInfo(): Promise<StakingInfo> {
     try {
-      const api = await this.getApi();
+      const api = await this.ensureApi();
       const stakingModule = this.getStakingModule(api);
 
       // Get active era info with fallback
@@ -595,7 +589,7 @@ class PolkadotApiService {
   }
 
   async getValidators(): Promise<ValidatorInfo[]> {
-    const api = await this.getApi();
+    const api = await this.ensureApi();
     const stakingModule = this.getStakingModule(api);
 
     try {
@@ -671,7 +665,7 @@ class PolkadotApiService {
   }
 
   async stake(amount: string, validators: string[]): Promise<void> {
-    const api = await this.getApi();
+    const api = await this.ensureApi();
     if (!api.tx.staking?.bond || !api.tx.staking?.nominate) {
       throw new PolkadotHubError(
         'Staking module not available',
@@ -696,7 +690,7 @@ class PolkadotApiService {
   }
 
   async unstake(amount: string): Promise<void> {
-    const api = await this.getApi();
+    const api = await this.ensureApi();
     if (!api.tx.staking?.unbond) {
       throw new PolkadotHubError(
         'Staking module not available',
@@ -718,7 +712,7 @@ class PolkadotApiService {
   }
 
   async withdrawUnstaked(): Promise<void> {
-    const api = await this.getApi();
+    const api = await this.ensureApi();
     if (!api.tx.staking?.withdrawUnbonded) {
       throw new PolkadotHubError(
         'Staking module not available',
@@ -747,7 +741,7 @@ class PolkadotApiService {
     const startTime = Date.now();
     log.info('Signing and sending transaction...');
 
-    const api = await this.getApi();
+    const api = await this.ensureApi();
 
     return new Promise((resolve, reject) => {
       tx.signAndSend(address, {}, ({ status, dispatchError, events }) => {
@@ -870,7 +864,7 @@ class PolkadotApiService {
   }
 
   async getNominatorInfo(address: string): Promise<NominatorInfo> {
-    const api = await this.getApi();
+    const api = await this.ensureApi();
     
     if (!api.query.staking) {
       throw new PolkadotHubError(
@@ -942,7 +936,7 @@ class PolkadotApiService {
   }
 
   async getHistoricalRewards(startEra: number, endEra: number) {
-    const api = await this.getApi();
+    const api = await this.ensureApi();
     const stakingModule = this.getStakingModule(api);
 
     if (!stakingModule.erasValidatorReward) {
@@ -982,7 +976,7 @@ class PolkadotApiService {
   }
 
   async getReferenda(): Promise<Referendum[]> {
-    const api = await this.getApi();
+    const api = await this.ensureApi();
     
     if (!api.query.referenda?.referendumInfoFor) {
       throw new PolkadotHubError(
@@ -1030,7 +1024,7 @@ class PolkadotApiService {
   }
 
   async getTracks(): Promise<Track[]> {
-    const api = await this.getApi();
+    const api = await this.ensureApi();
     
     if (!api.query.referenda?.tracks) {
       throw new PolkadotHubError(
@@ -1072,7 +1066,7 @@ class PolkadotApiService {
   async getDelegations(address?: string): Promise<DelegationInfo[]> {
     if (!address) return [];
 
-    const api = await this.getApi();
+    const api = await this.ensureApi();
     if (!api.query.convictionVoting?.votingFor) {
       throw new PolkadotHubError(
         'Conviction voting module not available',
@@ -1103,7 +1097,7 @@ class PolkadotApiService {
   }
 
   async vote(referendumIndex: number, vote: boolean, conviction: number): Promise<void> {
-    const api = await this.getApi();
+    const api = await this.ensureApi();
     if (!api.tx.convictionVoting?.vote) {
       throw new PolkadotHubError(
         'Conviction voting module not available',
@@ -1125,7 +1119,7 @@ class PolkadotApiService {
   }
 
   async delegate(trackId: number, target: string, amount: string, conviction: number): Promise<void> {
-    const api = await this.getApi();
+    const api = await this.ensureApi();
     if (!api.tx.convictionVoting?.delegate) {
       throw new PolkadotHubError(
         'Conviction voting module not available',
@@ -1147,7 +1141,7 @@ class PolkadotApiService {
   }
 
   async undelegate(trackId: number): Promise<void> {
-    const api = await this.getApi();
+    const api = await this.ensureApi();
     if (!api.tx.convictionVoting?.undelegate) {
       throw new PolkadotHubError(
         'Conviction voting module not available',
@@ -1168,76 +1162,38 @@ class PolkadotApiService {
     await this.signAndSend(tx, this.selectedAccount.address);
   }
 
-  async bond(account: WalletAccount, amount: string, controller?: string) {
-    const api = await this.getApi();
-    
+  async bond(account: InjectedAccount, amount: string): Promise<any> {
+    const api = await this.ensureApi();
     if (!api.tx.staking?.bond) {
-      throw new PolkadotHubError(
-        'Staking module not available',
-        ErrorCodes.API.ERROR,
-        'Required staking transactions are not available'
-      );
+      throw new Error('Staking module not available');
     }
 
-    if (!account.address) {
-      throw new PolkadotHubError(
-        'Invalid account',
-        ErrorCodes.WALLET.NOT_CONNECTED,
-        'Account address is required'
-      );
-    }
-
-    return controller
-      ? api.tx.staking.bond(controller, amount, 'Staked')
-      : api.tx.staking.bond(account.address, amount, 'Staked');
+    await web3Enable('Polkadot Dashboard');
+    return api.tx.staking.bond(account.address, amount, 'Staked');
   }
 
-  async nominate(account: WalletAccount, targets: string[]) {
-    const api = await this.getApi();
-    
+  async nominate(targets: string[]): Promise<any> {
+    const api = await this.ensureApi();
     if (!api.tx.staking?.nominate) {
-      throw new PolkadotHubError(
-        'Staking module not available',
-        ErrorCodes.API.ERROR,
-        'Required staking transactions are not available'
-      );
+      throw new Error('Staking module not available');
     }
 
-    if (!account.address) {
-      throw new PolkadotHubError(
-        'Invalid account',
-        ErrorCodes.WALLET.NOT_CONNECTED,
-        'Account address is required'
-      );
-    }
-
+    await web3Enable('Polkadot Dashboard');
     return api.tx.staking.nominate(targets);
   }
 
-  async unbond(account: WalletAccount, amount: string) {
-    const api = await this.getApi();
-    
+  async unbond(amount: string): Promise<any> {
+    const api = await this.ensureApi();
     if (!api.tx.staking?.unbond) {
-      throw new PolkadotHubError(
-        'Staking module not available',
-        ErrorCodes.API.ERROR,
-        'Required staking transactions are not available'
-      );
+      throw new Error('Staking module not available');
     }
 
-    if (!account.address) {
-      throw new PolkadotHubError(
-        'Invalid account',
-        ErrorCodes.WALLET.NOT_CONNECTED,
-        'Account address is required'
-      );
-    }
-
+    await web3Enable('Polkadot Dashboard');
     return api.tx.staking.unbond(amount);
   }
 
-  async withdrawUnbonded(account: WalletAccount, numSlashingSpans: number) {
-    const api = await this.getApi();
+  async withdrawUnbonded(account: InjectedAccount, numSlashingSpans: number) {
+    const api = await this.ensureApi();
     
     if (!api.tx.staking?.withdrawUnbonded) {
       throw new PolkadotHubError(

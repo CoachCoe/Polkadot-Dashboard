@@ -173,7 +173,9 @@ export default function EcosystemPage() {
   if (isLoading) {
     return (
       <DashboardLayout>
-        <LoadingSpinner />
+        <div className="min-h-screen flex items-center justify-center">
+          <LoadingSpinner className="w-12 h-12 text-pink-500" />
+        </div>
       </DashboardLayout>
     );
   }
@@ -181,97 +183,96 @@ export default function EcosystemPage() {
   if (error) {
     return (
       <DashboardLayout>
-        <ErrorDisplay 
-          error={error}
-          action={{
-            label: 'Try Again',
-            onClick: handleRefresh
-          }}
-        />
+        <div className="min-h-screen flex items-center justify-center">
+          <ErrorDisplay 
+            error={error}
+            action={{
+              label: 'Try Again',
+              onClick: handleRefresh
+            }}
+          />
+        </div>
       </DashboardLayout>
     );
   }
 
   return (
     <DashboardLayout>
-      <div className="px-6 space-y-8">
-        <div className="flex justify-between items-center">
-          <h1 className="text-3xl font-bold">Ecosystem Projects</h1>
-          <button
-            onClick={handleRefresh}
-            className="text-pink-600 hover:text-pink-700"
-            disabled={isLoading}
-          >
-            {isLoading ? 'Refreshing...' : 'Refresh'}
-          </button>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-4">
-          <div className="flex-1 flex items-center gap-4 min-w-0">
-            <div className="w-40">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+      <div className="max-w-[1400px] mx-auto px-6 space-y-8">
+        {/* Header Section */}
+        <div className="relative">
+          <div className="absolute inset-0 bg-gradient-to-br from-pink-500/5 via-purple-500/5 to-blue-500/5 rounded-3xl" />
+          <div className="relative space-y-6 p-8 backdrop-blur-xl bg-white/50 rounded-3xl border border-gray-100 shadow-xl">
+            <h1 className="text-4xl font-bold bg-gradient-to-br from-pink-500 via-purple-600 to-blue-600 bg-clip-text text-transparent">
+              Ecosystem Projects
+            </h1>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <MultiSelect
                 value={filter.status || []}
-                onValueChange={(status) => handleFilterChange({ ...filter, status })}
+                onValueChange={(value: ProjectStatus[]) => handleFilterChange({ status: value })}
                 items={statusOptions}
-                placeholder="Select status"
-                disabled={loading}
-                className="bg-white border-gray-200 shadow-sm"
+                placeholder="Status"
+                className="bg-white/80 w-full"
               />
-            </div>
-
-            <div className="w-40">
-              <label className="block text-sm font-medium text-gray-700 mb-1">Chain</label>
               <MultiSelect
                 value={filter.chains || []}
-                onValueChange={(chains) => handleFilterChange({ ...filter, chains })}
+                onValueChange={(value: string[]) => handleFilterChange({ chains: value })}
                 items={chainOptions}
-                placeholder="Select chain"
-                disabled={loading}
-                className="bg-white border-gray-200 shadow-sm"
+                placeholder="Chains"
+                className="bg-white/80 w-full"
               />
-            </div>
-
-            <div className="w-40">
-              <label className="block text-sm font-medium text-gray-700 mb-1">TVL Range</label>
               <MultiSelect
                 value={filter.tvlRanges || []}
-                onValueChange={(tvlRanges) => handleFilterChange({ ...filter, tvlRanges })}
+                onValueChange={(value: string[]) => handleFilterChange({ tvlRanges: value })}
                 items={tvlRangeOptions}
-                placeholder="Select range"
-                disabled={loading}
-                className="bg-white border-gray-200 shadow-sm"
+                placeholder="TVL Range"
+                className="bg-white/80 w-full"
               />
+              <div className="relative sm:col-span-2">
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <Input
+                  type="text"
+                  placeholder="Search projects..."
+                  value={searchTerm}
+                  onChange={(e) => handleSearch(e.target.value)}
+                  className="pl-10 pr-4 py-2 w-full bg-white/80 backdrop-blur-sm border-gray-200 rounded-xl focus:ring-pink-500 focus:border-pink-500"
+                />
+              </div>
             </div>
           </div>
+        </div>
 
-          <div className="w-64">
-            <Input
-              type="text"
-              placeholder="Search projects..."
-              value={searchTerm}
-              onChange={(e) => handleSearch(e.target.value)}
-              className="w-full"
-              leftIcon={<MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />}
+        {/* Categories Section */}
+        <div className="overflow-hidden rounded-3xl bg-gradient-to-br from-gray-50 via-white to-gray-50 p-1">
+          <div className="bg-white/80 backdrop-blur-sm rounded-2xl p-6 border border-gray-100">
+            <CategoryList
+              categories={categories}
+              selectedCategory={selectedCategory}
+              onSelect={handleCategorySelect}
             />
           </div>
         </div>
 
-        <section>
-          <CategoryList
-            categories={categories}
-            selectedCategory={selectedCategory}
-            onSelect={handleCategorySelect}
-          />
-        </section>
+        {/* Projects Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {projectStats.map((project) => (
+            <div key={project.id} className="group">
+              <div className="bg-white/80 backdrop-blur-sm hover:shadow-xl transition-all duration-300 transform hover:-translate-y-1 rounded-2xl overflow-hidden border border-gray-100 group-hover:border-pink-100">
+                <ProjectCard project={project} />
+              </div>
+            </div>
+          ))}
+        </div>
 
-        <section>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {projectStats.map((project) => (
-              <ProjectCard key={project.id} project={project} />
-            ))}
+        {projectStats.length === 0 && !loading && (
+          <div className="text-center py-12 px-4 rounded-2xl bg-white/80 backdrop-blur-sm border border-gray-100">
+            <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-gray-50 flex items-center justify-center">
+              <MagnifyingGlassIcon className="w-8 h-8 text-gray-400" />
+            </div>
+            <p className="text-gray-600 text-lg font-medium">No projects found matching your criteria</p>
+            <p className="text-gray-500 mt-1">Try adjusting your filters or search term</p>
           </div>
-        </section>
+        )}
       </div>
     </DashboardLayout>
   );

@@ -1,17 +1,17 @@
 'use client';
 
 import { create } from 'zustand';
-import type { WalletAccount } from '@/services/walletService';
-import polkadotApiService from '@/services/polkadotApiService';
+import { InjectedAccount } from '@polkadot/extension-inject/types';
+import { getWallets, Wallet } from '@talismn/connect-wallets';
+import { web3Enable } from '@polkadot/extension-dapp';
 
 interface WalletState {
+  selectedAccount: InjectedAccount | null;
+  accounts: InjectedAccount[];
+  wallets: Wallet[];
   isConnected: boolean;
-  accounts: WalletAccount[];
-  selectedAccount: WalletAccount | null;
-  error: Error | null;
-  connect: () => Promise<void>;
-  disconnect: () => void;
-  selectAccount: (account: WalletAccount) => void;
+  setSelectedAccount: (account: InjectedAccount | null) => void;
+  loadAccounts: () => Promise<void>;
 }
 
 declare global {
@@ -21,40 +21,47 @@ declare global {
 }
 
 export const useWalletStore = create<WalletState>((set) => ({
-  isConnected: false,
-  accounts: [],
   selectedAccount: null,
-  error: null,
+  accounts: [],
+  wallets: [],
+  isConnected: false,
 
-  connect: async () => {
+  setSelectedAccount: (account) => {
+    set({ selectedAccount: account });
+  },
+
+  loadAccounts: async () => {
     try {
-      const accounts = await polkadotApiService.initializeWallet();
+      // First enable web3
+      const extensions = await web3Enable('Polkadot Dashboard');
+      if (extensions.length === 0) {
+        throw new Error('No compatible wallet found. Please install Polkadot.js, Talisman, or Nova Wallet.');
+      }
+
+      // Get available wallets
+      const wallets = getWallets();
+      const availableWallet = wallets.find((w) => w.installed);
+      
+      if (!availableWallet) {
+        throw new Error('No compatible wallet found. Please install Polkadot.js, Talisman, or Nova Wallet.');
+      }
+
+      // Enable the wallet first
+      await availableWallet.enable('Polkadot Dashboard');
+      
+      // Then get accounts
+      const accounts = await availableWallet.getAccounts();
+      const selectedAccount = accounts.length > 0 ? accounts[0] : null;
+      
       set({
-        isConnected: true,
         accounts,
-        selectedAccount: accounts[0] || null,
-        error: null
-      });
+        wallets,
+        isConnected: accounts.length > 0,
+        selectedAccount
+      } as Partial<WalletState>);
     } catch (error) {
-      set({
-        isConnected: false,
-        accounts: [],
-        selectedAccount: null,
-        error: error instanceof Error ? error : new Error('Failed to connect wallet')
-      });
+      console.error('Failed to load accounts:', error);
+      throw error;
     }
   },
-
-  disconnect: () => {
-    set({
-      isConnected: false,
-      accounts: [],
-      selectedAccount: null,
-      error: null
-    });
-  },
-
-  selectAccount: (account: WalletAccount) => {
-    set({ selectedAccount: account });
-  }
 })); 
