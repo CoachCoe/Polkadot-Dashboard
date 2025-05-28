@@ -9,26 +9,34 @@ import type { StakingLedger } from '@polkadot/types/interfaces/staking';
 import type { Vec } from '@polkadot/types';
 import type { BalanceLock } from '@polkadot/types/interfaces/balances';
 import type { Option } from '@polkadot/types';
-import { ApiPromise } from '@polkadot/api';
+import { ApiPromise, WsProvider } from '@polkadot/api';
 import { formatBalance } from '@polkadot/util';
 
 export interface PortfolioBalance {
   total: string;
   available: string;
   transferable: string;
-  locked: string;
+  locked: {
+    total: string;
+    staking: string;
+    democracy: string;
+    vesting: string;
+    governance: string;
+  };
   bonded: string;
   unbonding: string;
   redeemable: string;
-  democracy: string;
 }
 
 export interface CrossChainBalance {
   chain: string;
-  balance: string;
   symbol: string;
-  price: string;
+  balance: string;
   value: string;
+  usdValue: string;
+  logo: string;
+  locked?: string;
+  explorerUrl?: string;
 }
 
 export interface PortfolioStats {
@@ -141,18 +149,29 @@ class PortfolioService {
           return total.add(new BN(chunk.value.toString()));
         }, new BN(0)) : new BN(0);
 
+      // Parse different types of locks
       const democracyLock = locks.find(lock => lock.id.toString() === 'democrac');
+      const vestingLock = locks.find(lock => lock.id.toString() === 'vesting');
+      const governanceLock = locks.find(lock => lock.id.toString() === 'governan');
+
       const democracyLocked = democracyLock ? new BN(democracyLock.amount.toString()) : new BN(0);
+      const vestingLocked = vestingLock ? new BN(vestingLock.amount.toString()) : new BN(0);
+      const governanceLocked = governanceLock ? new BN(governanceLock.amount.toString()) : new BN(0);
 
       return {
         total: free.add(reserved).toString(),
         available: free.sub(totalLocked).toString(),
         transferable: free.sub(totalLocked).toString(),
-        locked: totalLocked.toString(),
+        locked: {
+          total: totalLocked.toString(),
+          staking: bondedBalance.toString(),
+          democracy: democracyLocked.toString(),
+          vesting: vestingLocked.toString(),
+          governance: governanceLocked.toString()
+        },
         bonded: bondedBalance.toString(),
         unbonding: unbondingBalance.toString(),
-        redeemable: '0', // TODO: Calculate redeemable amount
-        democracy: democracyLocked.toString()
+        redeemable: '0' // TODO: Calculate redeemable amount
       };
     } catch (error) {
       throw new PolkadotHubError(
@@ -231,19 +250,22 @@ class PortfolioService {
 
   async getPortfolioStats(address: string): Promise<PortfolioStats> {
     try {
-      const [balance, assetHubBalance, parachainBalances] = await Promise.all([
-        this.getBalance(address),
-        this.getAssetHubBalance(address),
-        this.getParachainBalances(address)
-      ]);
-
-      const total = BigInt(balance.total);
-      const assetHub = assetHubBalance;
-      const parachains = parachainBalances;
-
-      const relayChainPercentage = Number((BigInt(100) * total) / (total + assetHub + parachains));
-      const assetHubPercentage = Number((BigInt(100) * assetHub) / (total + assetHub + parachains));
-      const parachainsPercentage = Number((BigInt(100) * parachains) / (total + assetHub + parachains));
+      const balance = await this.getBalance(address);
+      
+      // Convert string balances to BigInt for calculations
+      const relayChainTotal = BigInt(balance.total || 0);
+      const assetHubTotal = BigInt(0); // TODO: Implement actual Asset Hub balance
+      const parachainsTotal = BigInt(0); // TODO: Implement actual parachain balances
+      
+      const totalValue = relayChainTotal + assetHubTotal + parachainsTotal;
+      
+      // Calculate percentages
+      const relayChainPercentage = totalValue === BigInt(0) ? 0 :
+        Number((BigInt(100) * relayChainTotal) / totalValue);
+      const assetHubPercentage = totalValue === BigInt(0) ? 0 :
+        Number((BigInt(100) * assetHubTotal) / totalValue);
+      const parachainsPercentage = totalValue === BigInt(0) ? 0 :
+        Number((BigInt(100) * parachainsTotal) / totalValue);
 
       // Mock 24h change data for now
       // TODO: Implement real price change tracking
@@ -260,10 +282,10 @@ class PortfolioService {
         },
         balanceDetails: {
           available: balance.available,
-          locked: balance.locked,
+          locked: balance.locked.total,
           bonded: balance.bonded,
           unbonding: balance.unbonding,
-          democracy: balance.democracy
+          democracy: balance.locked.democracy
         }
       };
     } catch (error) {
@@ -275,30 +297,73 @@ class PortfolioService {
     }
   }
 
-  async getMultiChainBalances(_address: string): Promise<ChainBalance[]> {
+  async getMultiChainBalances(address: string): Promise<CrossChainBalance[]> {
     try {
-      // TODO: Implement actual chain balance fetching
+      const api = await polkadotService.getApi();
+      if (!api) {
+        throw new PolkadotHubError(
+          'API not ready',
+          ErrorCodes.API.ERROR,
+          'API methods not available'
+        );
+      }
+
+      // Fetch balances from different chains
+      const [assetHubBalance, acalaBalance, moonbeamBalance, astarBalance] = await Promise.all([
+        this.getAssetHubBalance(address),
+        this.getAcalaBalance(address),
+        this.getMoonbeamBalance(address),
+        this.getAstarBalance(address)
+      ]);
+
       return [
         {
-          chain: 'Polkadot',
+          chain: 'Asset Hub',
           symbol: 'DOT',
-          balance: '100',
-          usdValue: '500',
-          logo: '/images/polkadot.svg'
+          balance: assetHubBalance.total,
+          value: '0', // TODO: Implement price fetching
+          usdValue: '0',
+          logo: '/images/chains/asset-hub.png',
+          locked: assetHubBalance.locked?.total,
+          explorerUrl: `https://assethub.subscan.io/account/${address}`
         },
         {
-          chain: 'Asset Hub',
-          symbol: 'USDC',
-          balance: '500',
-          usdValue: '500',
-          logo: '/images/usdc.svg'
+          chain: 'Acala',
+          symbol: 'ACA',
+          balance: acalaBalance.total,
+          value: '0',
+          usdValue: '0',
+          logo: '/images/chains/acala.png',
+          locked: acalaBalance.locked?.total,
+          explorerUrl: `https://acala.subscan.io/account/${address}`
+        },
+        {
+          chain: 'Moonbeam',
+          symbol: 'GLMR',
+          balance: moonbeamBalance.total,
+          value: '0',
+          usdValue: '0',
+          logo: '/images/chains/moonbeam.png',
+          locked: moonbeamBalance.locked?.total,
+          explorerUrl: `https://moonbeam.subscan.io/account/${address}`
+        },
+        {
+          chain: 'Astar',
+          symbol: 'ASTR',
+          balance: astarBalance.total,
+          value: '0',
+          usdValue: '0',
+          logo: '/images/chains/astar.png',
+          locked: astarBalance.locked?.total,
+          explorerUrl: `https://astar.subscan.io/account/${address}`
         }
-      ];
+      ].filter(balance => balance.balance !== '0');
     } catch (error) {
+      console.error('Failed to fetch multi-chain balances:', error);
       throw new PolkadotHubError(
-        'Failed to fetch chain balances',
-        ErrorCodes.PORTFOLIO.BALANCE_ERROR,
-        'Error fetching chain balances'
+        'Failed to fetch multi-chain balances',
+        ErrorCodes.API.REQUEST_FAILED,
+        'Could not load cross-chain balances. Please try again.'
       );
     }
   }
@@ -351,6 +416,27 @@ class PortfolioService {
         );
       }
 
+      // Fetch transactions from multiple sources
+      const [relayChainTxs, assetHubTxs, acalaTxs] = await Promise.all([
+        this.getRelayChainTransactions(address),
+        this.getAssetHubTransactions(address),
+        this.getAcalaTransactions(address)
+      ]);
+
+      // Combine and sort transactions by timestamp
+      const allTransactions = [...relayChainTxs, ...assetHubTxs, ...acalaTxs]
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 50); // Limit to 50 most recent transactions
+
+      return allTransactions;
+    } catch (error) {
+      console.error('Failed to fetch transactions:', error);
+      return [];
+    }
+  }
+
+  private async getRelayChainTransactions(address: string): Promise<Transaction[]> {
+    try {
       const response = await fetch(`${this.SUBSCAN_API}/scan/transfers`, {
         method: 'POST',
         headers: {
@@ -358,13 +444,13 @@ class PortfolioService {
         },
         body: JSON.stringify({
           address,
-          row: 10,
+          row: 20,
           page: 0
         })
       });
 
       if (!response.ok) {
-        throw new Error('Failed to fetch transactions');
+        throw new Error('Failed to fetch relay chain transactions');
       }
 
       const data = await response.json();
@@ -376,11 +462,83 @@ class PortfolioService {
         from: tx.from,
         to: tx.to,
         status: tx.success ? 'success' : 'failed',
-        chain: tx.chain || 'Polkadot',
+        chain: 'Polkadot',
         blockExplorerUrl: `${this.BLOCK_EXPLORER_BASE}/extrinsic/${tx.hash}`
       }));
     } catch (error) {
-      console.error('Failed to fetch transactions:', error);
+      console.error('Failed to fetch relay chain transactions:', error);
+      return [];
+    }
+  }
+
+  private async getAssetHubTransactions(address: string): Promise<Transaction[]> {
+    try {
+      const response = await fetch('https://assethub.subscan.io/api/v2/scan/transfers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          address,
+          row: 20,
+          page: 0
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch Asset Hub transactions');
+      }
+
+      const data = await response.json();
+      return data.data.transfers.map((tx: any) => ({
+        hash: tx.hash,
+        type: 'transfer',
+        amount: formatBalance(tx.amount, { withUnit: false }),
+        timestamp: tx.block_timestamp * 1000,
+        from: tx.from,
+        to: tx.to,
+        status: tx.success ? 'success' : 'failed',
+        chain: 'Asset Hub',
+        blockExplorerUrl: `https://assethub.subscan.io/extrinsic/${tx.hash}`
+      }));
+    } catch (error) {
+      console.error('Failed to fetch Asset Hub transactions:', error);
+      return [];
+    }
+  }
+
+  private async getAcalaTransactions(address: string): Promise<Transaction[]> {
+    try {
+      const response = await fetch('https://acala.subscan.io/api/v2/scan/transfers', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          address,
+          row: 20,
+          page: 0
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error('Failed to fetch Acala transactions');
+      }
+
+      const data = await response.json();
+      return data.data.transfers.map((tx: any) => ({
+        hash: tx.hash,
+        type: this.determineTransactionType(tx),
+        amount: formatBalance(tx.amount, { withUnit: false }),
+        timestamp: tx.block_timestamp * 1000,
+        from: tx.from,
+        to: tx.to,
+        status: tx.success ? 'success' : 'failed',
+        chain: 'Acala',
+        blockExplorerUrl: `https://acala.subscan.io/extrinsic/${tx.hash}`
+      }));
+    } catch (error) {
+      console.error('Failed to fetch Acala transactions:', error);
       return [];
     }
   }
@@ -664,14 +822,178 @@ class PortfolioService {
     return 'transfer';
   }
 
-  private async getAssetHubBalance(_address: string): Promise<bigint> {
-    // Implementation for Asset Hub balance
-    return BigInt(0);
+  private async getAssetHubBalance(address: string): Promise<PortfolioBalance> {
+    try {
+      // Connect to Asset Hub
+      const wsProvider = new WsProvider('wss://polkadot-asset-hub-rpc.polkadot.io');
+      const api = await ApiPromise.create({ provider: wsProvider });
+
+      if (!api.query?.system?.account || !api.query?.balances?.locks) {
+        throw new Error('Required API methods not available');
+      }
+
+      const [accountData, locks] = await Promise.all([
+        api.query.system.account(address),
+        api.query.balances.locks(address)
+      ]);
+
+      const { free, reserved, miscFrozen, feeFrozen } = (accountData as any).data;
+      const totalLocked = new BN(Math.max(
+        miscFrozen.toNumber(),
+        feeFrozen.toNumber()
+      ));
+
+      // Parse different types of locks
+      const locksArray = (locks as unknown as Vec<BalanceLock>).toArray();
+      const democracyLock = locksArray.find(lock => lock.id.toString() === 'democrac');
+      const vestingLock = locksArray.find(lock => lock.id.toString() === 'vesting');
+      const governanceLock = locksArray.find(lock => lock.id.toString() === 'governan');
+
+      const democracyLocked = democracyLock ? new BN(democracyLock.amount.toString()) : new BN(0);
+      const vestingLocked = vestingLock ? new BN(vestingLock.amount.toString()) : new BN(0);
+      const governanceLocked = governanceLock ? new BN(governanceLock.amount.toString()) : new BN(0);
+
+      await api.disconnect();
+
+      return {
+        total: free.add(reserved).toString(),
+        available: free.sub(totalLocked).toString(),
+        transferable: free.sub(totalLocked).toString(),
+        locked: {
+          total: totalLocked.toString(),
+          staking: '0', // Asset Hub doesn't have staking
+          democracy: democracyLocked.toString(),
+          vesting: vestingLocked.toString(),
+          governance: governanceLocked.toString()
+        },
+        bonded: '0',
+        unbonding: '0',
+        redeemable: '0'
+      };
+    } catch (error) {
+      console.error('Failed to fetch Asset Hub balance:', error);
+      return {
+        total: '0',
+        available: '0',
+        transferable: '0',
+        locked: {
+          total: '0',
+          staking: '0',
+          democracy: '0',
+          vesting: '0',
+          governance: '0'
+        },
+        bonded: '0',
+        unbonding: '0',
+        redeemable: '0'
+      };
+    }
   }
 
-  private async getParachainBalances(_address: string): Promise<bigint> {
-    // Implementation for parachain balances
-    return BigInt(0);
+  private async getAcalaBalance(address: string): Promise<PortfolioBalance> {
+    try {
+      // Connect to Acala
+      const wsProvider = new WsProvider('wss://acala-rpc-0.aca-api.network');
+      const api = await ApiPromise.create({ provider: wsProvider });
+
+      if (!api.query?.system?.account || !api.query?.balances?.locks) {
+        throw new Error('Required API methods not available');
+      }
+
+      const [accountData, locks] = await Promise.all([
+        api.query.system.account(address),
+        api.query.balances.locks(address)
+      ]);
+
+      const { free, reserved, miscFrozen, feeFrozen } = (accountData as any).data;
+      const totalLocked = new BN(Math.max(
+        miscFrozen.toNumber(),
+        feeFrozen.toNumber()
+      ));
+
+      // Parse different types of locks
+      const locksArray = (locks as unknown as Vec<BalanceLock>).toArray();
+      const democracyLock = locksArray.find(lock => lock.id.toString() === 'democrac');
+      const vestingLock = locksArray.find(lock => lock.id.toString() === 'vesting');
+      const governanceLock = locksArray.find(lock => lock.id.toString() === 'governan');
+
+      const democracyLocked = democracyLock ? new BN(democracyLock.amount.toString()) : new BN(0);
+      const vestingLocked = vestingLock ? new BN(vestingLock.amount.toString()) : new BN(0);
+      const governanceLocked = governanceLock ? new BN(governanceLock.amount.toString()) : new BN(0);
+
+      await api.disconnect();
+
+      return {
+        total: free.add(reserved).toString(),
+        available: free.sub(totalLocked).toString(),
+        transferable: free.sub(totalLocked).toString(),
+        locked: {
+          total: totalLocked.toString(),
+          staking: '0',
+          democracy: democracyLocked.toString(),
+          vesting: vestingLocked.toString(),
+          governance: governanceLocked.toString()
+        },
+        bonded: '0',
+        unbonding: '0',
+        redeemable: '0'
+      };
+    } catch (error) {
+      console.error('Failed to fetch Acala balance:', error);
+      return {
+        total: '0',
+        available: '0',
+        transferable: '0',
+        locked: {
+          total: '0',
+          staking: '0',
+          democracy: '0',
+          vesting: '0',
+          governance: '0'
+        },
+        bonded: '0',
+        unbonding: '0',
+        redeemable: '0'
+      };
+    }
+  }
+
+  private async getMoonbeamBalance(_address: string): Promise<PortfolioBalance> {
+    // TODO: Implement actual Moonbeam balance fetching
+    return {
+      total: '0',
+      available: '0',
+      transferable: '0',
+      locked: {
+        total: '0',
+        staking: '0',
+        democracy: '0',
+        vesting: '0',
+        governance: '0'
+      },
+      bonded: '0',
+      unbonding: '0',
+      redeemable: '0'
+    };
+  }
+
+  private async getAstarBalance(_address: string): Promise<PortfolioBalance> {
+    // TODO: Implement actual Astar balance fetching
+    return {
+      total: '0',
+      available: '0',
+      transferable: '0',
+      locked: {
+        total: '0',
+        staking: '0',
+        democracy: '0',
+        vesting: '0',
+        governance: '0'
+      },
+      bonded: '0',
+      unbonding: '0',
+      redeemable: '0'
+    };
   }
 
   private calculateStakingAPR(_rewards: any): number {

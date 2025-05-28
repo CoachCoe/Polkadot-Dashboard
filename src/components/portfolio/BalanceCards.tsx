@@ -6,6 +6,8 @@ import { portfolioService, type PortfolioBalance } from '@/services/portfolioSer
 import { Card } from '@/components/ui/Card';
 import { useWebSocket } from '@/hooks/useWebSocket';
 import { formatBalance } from '@polkadot/util';
+import Link from 'next/link';
+import { ArrowTopRightOnSquareIcon } from '@heroicons/react/24/outline';
 
 interface BalanceCardsProps {
   className?: string;
@@ -78,33 +80,91 @@ export function BalanceCards({ className, balance: initialBalance, isLoading: ex
     return null;
   }
 
-  const cards = [
+  const mainCards = [
     {
       title: 'Total Balance',
       value: formatBalance(balance.total, { withUnit: 'DOT' }),
-      description: 'Total value of all assets'
+      description: 'Total value of all assets',
+      link: selectedAccount ? `https://polkadot.subscan.io/account/${selectedAccount.address}` : undefined
     },
     {
       title: 'Available',
-      value: formatBalance(balance.available || '0', { withUnit: 'DOT' }),
+      value: formatBalance(balance.available, { withUnit: 'DOT' }),
       description: 'Available for transfer'
     },
     {
-      title: 'Locked',
-      value: formatBalance(balance.locked, { withUnit: 'DOT' }),
-      description: 'Locked in staking, governance, etc.'
+      title: 'Total Locked',
+      value: formatBalance(balance.locked.total, { withUnit: 'DOT' }),
+      description: 'Total value locked'
+    }
+  ];
+
+  const lockCards = [
+    {
+      title: 'Staking',
+      value: formatBalance(balance.locked.staking, { withUnit: 'DOT' }),
+      description: 'Locked in staking',
+      link: selectedAccount ? `https://polkadot.subscan.io/account/${selectedAccount.address}?tab=staking` : undefined
+    },
+    {
+      title: 'Democracy',
+      value: formatBalance(balance.locked.democracy, { withUnit: 'DOT' }),
+      description: 'Locked in democracy',
+      link: selectedAccount ? `https://polkadot.subscan.io/account/${selectedAccount.address}?tab=democracy` : undefined
+    },
+    {
+      title: 'Governance',
+      value: formatBalance(balance.locked.governance, { withUnit: 'DOT' }),
+      description: 'Locked in governance'
     }
   ];
 
   return (
-    <div className={`grid grid-cols-1 md:grid-cols-3 gap-6 ${className}`}>
-      {cards.map((card) => (
-        <Card key={card.title} className="p-6">
-          <h3 className="text-sm font-medium text-gray-500">{card.title}</h3>
-          <p className="mt-2 text-3xl font-semibold text-gray-900">{card.value}</p>
-          <p className="mt-1 text-sm text-gray-500">{card.description}</p>
-        </Card>
-      ))}
+    <div className={`space-y-6 ${className}`}>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {mainCards.map((card) => (
+          <Card key={card.title} className="p-6">
+            <div className="flex justify-between items-start">
+              <h3 className="text-sm font-medium text-gray-500">{card.title}</h3>
+              {card.link && (
+                <Link
+                  href={card.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:text-blue-600"
+                >
+                  <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                </Link>
+              )}
+            </div>
+            <p className="mt-2 text-3xl font-semibold text-gray-900">{card.value}</p>
+            <p className="mt-1 text-sm text-gray-500">{card.description}</p>
+          </Card>
+        ))}
+      </div>
+
+      <h3 className="text-lg font-semibold mt-6">Locked Balances</h3>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {lockCards.map((card) => (
+          <Card key={card.title} className="p-6">
+            <div className="flex justify-between items-start">
+              <h3 className="text-sm font-medium text-gray-500">{card.title}</h3>
+              {card.link && (
+                <Link
+                  href={card.link}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-blue-500 hover:text-blue-600"
+                >
+                  <ArrowTopRightOnSquareIcon className="h-4 w-4" />
+                </Link>
+              )}
+            </div>
+            <p className="mt-2 text-2xl font-semibold text-gray-900">{card.value}</p>
+            <p className="mt-1 text-sm text-gray-500">{card.description}</p>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 } 

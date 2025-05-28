@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
-import { polkadotService } from '@/services/polkadot';
+import polkadotApiService from '@/services/polkadotApiService';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 interface UnlockingEntry {
@@ -16,21 +16,21 @@ interface StakingData {
   unlocking: UnlockingEntry[];
 }
 
-interface StakingInfo {
+interface AccountStakingInfo {
   balance: string;
   stakingInfo: StakingData | null;
   validators: string[];
 }
 
 export function useStaking() {
-  const { selectedAccount, signer } = useWalletStore();
-  const [stakingInfo, setStakingInfo] = useState<StakingInfo | null>(null);
+  const { selectedAccount } = useWalletStore();
+  const [stakingInfo, setStakingInfo] = useState<AccountStakingInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (selectedAccount) {
-      loadStakingInfo();
+      void loadStakingInfo();
     } else {
       // Clear staking info when account is disconnected
       setStakingInfo(null);
@@ -48,36 +48,30 @@ export function useStaking() {
       setError(null);
 
       const [accountInfo, validatorsResult] = await Promise.all([
-        polkadotService.getStakingInfo(selectedAccount.address),
-        polkadotService.getValidators()
+        polkadotApiService.getNominatorInfo(selectedAccount.address),
+        polkadotApiService.getValidators()
       ]);
 
       if (!accountInfo) {
         throw new PolkadotHubError(
           'Failed to load account info',
-          'STAKING_ERROR',
+          ErrorCodes.STAKING.VALIDATOR_ERROR,
           'Could not retrieve staking information for your account'
         );
       }
 
-      const validators = Array.isArray(validatorsResult) 
-        ? validatorsResult.map(v => v.toString())
-        : [];
+      const validators = validatorsResult.map(v => v.address);
 
-      const stakingData = accountInfo.stakingInfo;
-      
-      const formattedStakingInfo: StakingInfo = {
-        balance: accountInfo.balance?.toString() || '0',
-        stakingInfo: stakingData ? {
-          active: (stakingData.active || '0').toString(),
-          total: (stakingData.total || '0').toString(),
-          unlocking: Array.isArray(stakingData.unlocking) 
-            ? stakingData.unlocking.map(u => ({
-                value: u.value?.toString() || '0',
-                era: u.era?.toString() || '0'
-              }))
-            : []
-        } : null,
+      const formattedStakingInfo: AccountStakingInfo = {
+        balance: await polkadotApiService.getAccountBalance(selectedAccount.address),
+        stakingInfo: {
+          active: accountInfo.totalStaked,
+          total: accountInfo.totalStaked,
+          unlocking: accountInfo.unlocking.map(u => ({
+            value: u.value,
+            era: u.era.toString()
+          }))
+        },
         validators
       };
 
@@ -94,10 +88,10 @@ export function useStaking() {
   };
 
   const startStaking = async (amount: string, validatorId: string) => {
-    if (!selectedAccount || !signer) {
+    if (!selectedAccount) {
       throw new PolkadotHubError(
         'Wallet not connected',
-        'WALLET_NOT_CONNECTED',
+        ErrorCodes.WALLET.NOT_CONNECTED,
         'Please connect your wallet to start staking'
       );
     }
@@ -105,7 +99,7 @@ export function useStaking() {
     if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
       throw new PolkadotHubError(
         'Invalid amount',
-        'INVALID_AMOUNT',
+        ErrorCodes.VALIDATION.INVALID_AMOUNT,
         'Please enter a valid staking amount'
       );
     }
@@ -122,7 +116,7 @@ export function useStaking() {
       setIsLoading(true);
       setError(null);
 
-      await polkadotService.stake(selectedAccount.address, signer, amount, validatorId);
+      await polkadotApiService.stake(amount, [validatorId]);
       await loadStakingInfo(); // Refresh staking info after successful stake
     } catch (err) {
       const errorMessage = err instanceof PolkadotHubError 
@@ -137,10 +131,10 @@ export function useStaking() {
   };
 
   const stopStaking = async () => {
-    if (!selectedAccount || !signer) {
+    if (!selectedAccount) {
       throw new PolkadotHubError(
         'Wallet not connected',
-        'WALLET_NOT_CONNECTED',
+        ErrorCodes.WALLET.NOT_CONNECTED,
         'Please connect your wallet to stop staking'
       );
     }
@@ -157,7 +151,7 @@ export function useStaking() {
       setIsLoading(true);
       setError(null);
 
-      await polkadotService.unstake(selectedAccount.address, signer, stakingInfo.stakingInfo.active);
+      await polkadotApiService.unstake(stakingInfo.stakingInfo.active);
       await loadStakingInfo(); // Refresh staking info after successful unstake
     } catch (err) {
       const errorMessage = err instanceof PolkadotHubError 

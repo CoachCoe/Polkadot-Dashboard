@@ -2,36 +2,21 @@
 
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
-import { useAuth } from '@/hooks/useAuth';
-import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  isLoading: boolean;
-  error: PolkadotHubError | null;
+  error: Error | null;
   connect: () => Promise<void>;
-  disconnect: () => Promise<void>;
+  disconnect: () => void;
+  clearError: () => void;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const { disconnect: disconnectWallet, error: walletError } = useWalletStore();
-  const { login, logout, isLoading, error: authError } = useAuth();
-  const [error, setError] = useState<PolkadotHubError | null>(null);
-
-  useEffect(() => {
-    // Check session status on mount
-    fetch('/api/auth/session')
-      .then(res => res.json())
-      .then(data => {
-        setIsAuthenticated(data.isAuthenticated);
-      })
-      .catch(() => {
-        setIsAuthenticated(false);
-      });
-  }, []);
+  const { selectedAccount, connect: connectWallet, disconnect: disconnectWallet, error: walletError } = useWalletStore();
+  const [error, setError] = useState<Error | null>(null);
+  const [authError, setAuthError] = useState<Error | null>(null);
 
   useEffect(() => {
     // Update error state when wallet or auth errors change
@@ -40,67 +25,30 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const connect = async () => {
     try {
-      setError(null);
-
-      // Check if we're already authenticated
-      if (isAuthenticated) {
-        return;
-      }
-      
-      // Attempt to login
-      await login();
-      setIsAuthenticated(true);
+      await connectWallet();
     } catch (err) {
-      setIsAuthenticated(false);
-      if (err instanceof PolkadotHubError) {
-        setError(err);
-      } else {
-        setError(new PolkadotHubError(
-          err instanceof Error ? err.message : 'Failed to connect wallet',
-          'WALLET_CONNECTION_ERROR',
-          'Please try again or refresh the page.'
-        ));
-      }
-      throw err;
+      setAuthError(err instanceof Error ? err : new Error('Failed to connect'));
     }
   };
 
-  const disconnect = async () => {
-    try {
-      setError(null);
-      
-      // First logout from the server
-      await logout();
-      
-      // Then disconnect the wallet
-      await disconnectWallet();
-      
-      // Finally, update the authentication state
-      setIsAuthenticated(false);
-    } catch (err) {
-      // Still set as not authenticated even if logout fails
-      setIsAuthenticated(false);
-      if (err instanceof PolkadotHubError) {
-        setError(err);
-      } else {
-        setError(new PolkadotHubError(
-          err instanceof Error ? err.message : 'Failed to disconnect wallet',
-          ErrorCodes.WALLET.DISCONNECTED,
-          'Please try again or refresh the page.'
-        ));
-      }
-      throw err;
-    }
+  const disconnect = () => {
+    disconnectWallet();
+    setAuthError(null);
+  };
+
+  const clearError = () => {
+    setError(null);
+    setAuthError(null);
   };
 
   return (
     <AuthContext.Provider
       value={{
-        isAuthenticated,
-        isLoading,
+        isAuthenticated: !!selectedAccount,
         error,
         connect,
-        disconnect
+        disconnect,
+        clearError
       }}
     >
       {children}
@@ -108,10 +56,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useAuthContext() {
+export function useAuth() {
   const context = useContext(AuthContext);
   if (context === undefined) {
-    throw new Error('useAuthContext must be used within an AuthProvider');
+    throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
 } 

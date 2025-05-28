@@ -2,78 +2,61 @@
 
 import { useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
-import { governanceService, type Referendum, type DelegationInfo, type Track } from '@/services/governance';
-import { PolkadotHubError } from '@/utils/errorHandling';
-import type { AddressOrPair } from '@polkadot/api/types';
+import polkadotApiService from '@/services/polkadotApiService';
+import type { Referendum, Track, DelegationInfo } from '@/types/governance';
 
 export function useGovernance() {
-  const { selectedAccount, signer } = useWalletStore();
+  const { selectedAccount } = useWalletStore();
   const [referenda, setReferenda] = useState<Referendum[]>([]);
   const [tracks, setTracks] = useState<Track[]>([]);
   const [delegations, setDelegations] = useState<DelegationInfo[]>([]);
-  const [delegationHistory, setDelegationHistory] = useState<DelegationInfo[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<Error | null>(null);
 
   useEffect(() => {
     if (selectedAccount) {
-      void loadData();
+      void loadGovernanceData();
     }
   }, [selectedAccount]);
 
-  const loadData = async () => {
-    if (!selectedAccount) return;
-
+  const loadGovernanceData = async () => {
     try {
       setIsLoading(true);
       setError(null);
+
       const [
         referendaData,
         tracksData,
-        delegationsData,
-        delegationHistoryData
+        delegationsData
       ] = await Promise.all([
-        governanceService.getReferenda(),
-        governanceService.getTracks(),
-        governanceService.getDelegations(selectedAccount.address),
-        governanceService.getDelegationHistory(selectedAccount.address)
+        polkadotApiService.getReferenda(),
+        polkadotApiService.getTracks(),
+        polkadotApiService.getDelegations(selectedAccount?.address)
       ]);
 
       setReferenda(referendaData);
       setTracks(tracksData);
       setDelegations(delegationsData);
-      setDelegationHistory(delegationHistoryData);
     } catch (err) {
-      const errorMessage = err instanceof PolkadotHubError 
-        ? err.message
-        : 'Failed to load governance data';
-      setError(errorMessage);
-      console.error('Error loading governance data:', err);
+      setError(err instanceof Error ? err : new Error('Failed to load governance data'));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const vote = async (referendumIndex: number, vote: 'aye' | 'nay', amount: string) => {
-    if (!selectedAccount || !signer) {
-      throw new PolkadotHubError(
-        'Wallet not connected',
-        'WALLET_NOT_CONNECTED',
-        'Please connect your wallet to vote'
-      );
-    }
-
+  const vote = async (referendumIndex: number, vote: boolean, conviction: number) => {
     try {
       setIsLoading(true);
       setError(null);
-      await governanceService.vote(referendumIndex, vote, amount, selectedAccount.address as AddressOrPair);
-      await loadData(); // Refresh data after voting
+
+      if (!selectedAccount) {
+        throw new Error('No account selected');
+      }
+
+      await polkadotApiService.vote(referendumIndex, vote, conviction);
+      await loadGovernanceData();
     } catch (err) {
-      const errorMessage = err instanceof PolkadotHubError 
-        ? err.message
-        : 'Failed to cast vote';
-      setError(errorMessage);
-      console.error('Error casting vote:', err);
+      setError(err instanceof Error ? err : new Error('Failed to submit vote'));
       throw err;
     } finally {
       setIsLoading(false);
@@ -81,25 +64,18 @@ export function useGovernance() {
   };
 
   const delegate = async (trackId: number, target: string, amount: string, conviction: number) => {
-    if (!selectedAccount || !signer) {
-      throw new PolkadotHubError(
-        'Wallet not connected',
-        'WALLET_NOT_CONNECTED',
-        'Please connect your wallet to delegate votes'
-      );
-    }
-
     try {
       setIsLoading(true);
       setError(null);
-      await governanceService.delegate(trackId, target, amount, conviction, selectedAccount.address as AddressOrPair);
-      await loadData(); // Refresh data after delegating
+
+      if (!selectedAccount) {
+        throw new Error('No account selected');
+      }
+
+      await polkadotApiService.delegate(trackId, target, amount, conviction);
+      await loadGovernanceData();
     } catch (err) {
-      const errorMessage = err instanceof PolkadotHubError 
-        ? err.message
-        : 'Failed to delegate votes';
-      setError(errorMessage);
-      console.error('Error delegating votes:', err);
+      setError(err instanceof Error ? err : new Error('Failed to delegate'));
       throw err;
     } finally {
       setIsLoading(false);
@@ -107,25 +83,18 @@ export function useGovernance() {
   };
 
   const undelegate = async (trackId: number) => {
-    if (!selectedAccount || !signer) {
-      throw new PolkadotHubError(
-        'Wallet not connected',
-        'WALLET_NOT_CONNECTED',
-        'Please connect your wallet to undelegate votes'
-      );
-    }
-
     try {
       setIsLoading(true);
       setError(null);
-      await governanceService.undelegate(trackId, selectedAccount.address as AddressOrPair);
-      await loadData(); // Refresh data after undelegating
+
+      if (!selectedAccount) {
+        throw new Error('No account selected');
+      }
+
+      await polkadotApiService.undelegate(trackId);
+      await loadGovernanceData();
     } catch (err) {
-      const errorMessage = err instanceof PolkadotHubError 
-        ? err.message
-        : 'Failed to undelegate votes';
-      setError(errorMessage);
-      console.error('Error undelegating votes:', err);
+      setError(err instanceof Error ? err : new Error('Failed to undelegate'));
       throw err;
     } finally {
       setIsLoading(false);
@@ -136,12 +105,11 @@ export function useGovernance() {
     referenda,
     tracks,
     delegations,
-    delegationHistory,
     isLoading,
     error,
     vote,
     delegate,
     undelegate,
-    refresh: loadData
+    refresh: loadGovernanceData
   };
 } 

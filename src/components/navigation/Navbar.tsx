@@ -10,33 +10,38 @@ export function Navbar() {
       <div className="container mx-auto px-6 py-3">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-8">
-            <Link href="/" className="flex items-center space-x-2">
-              <Image
-                src="/images/polkadot-logo.svg"
-                alt="Polkadot Logo"
-                width={32}
-                height={32}
-              />
-              <span className="text-xl font-bold">Polkadot Hub</span>
+            <Link href="/" className="flex items-center space-x-3">
+              <div className="relative w-8 h-8">
+                <Image
+                  src="/images/logo.svg"
+                  alt="Polkadot Hub"
+                  fill
+                  className="object-contain"
+                  priority
+                />
+              </div>
+              <span className="text-xl font-semibold text-gray-900">Polkadot Dashboard</span>
             </Link>
             
             <div className="hidden md:flex items-center space-x-6">
-              <Link href="/dashboard" className="text-gray-600 hover:text-gray-900">
+              <Link href="/dashboard" className="text-gray-600 hover:text-gray-900 font-medium">
                 Dashboard
               </Link>
-              <Link href="/staking" className="text-gray-600 hover:text-gray-900">
+              <Link href="/staking" className="text-gray-600 hover:text-gray-900 font-medium">
                 Staking
               </Link>
-              <Link href="/governance" className="text-gray-600 hover:text-gray-900">
+              <Link href="/governance" className="text-gray-600 hover:text-gray-900 font-medium">
                 Governance
               </Link>
-              <Link href="/ecosystem" className="text-gray-600 hover:text-gray-900">
+              <Link href="/ecosystem" className="text-gray-600 hover:text-gray-900 font-medium">
                 Ecosystem
               </Link>
             </div>
           </div>
 
-          <WalletConnect />
+          <div className="flex items-center">
+            <WalletConnect />
+          </div>
         </div>
       </div>
     </nav>

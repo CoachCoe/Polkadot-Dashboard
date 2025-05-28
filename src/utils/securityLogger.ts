@@ -18,7 +18,11 @@ export enum SecurityEventType {
   TRANSACTION_FAILURE = 'TRANSACTION_FAILURE',
   GOVERNANCE_VOTE = 'GOVERNANCE_VOTE',
   GOVERNANCE_DELEGATE = 'GOVERNANCE_DELEGATE',
-  GOVERNANCE_UNDELEGATE = 'GOVERNANCE_UNDELEGATE'
+  GOVERNANCE_UNDELEGATE = 'GOVERNANCE_UNDELEGATE',
+  WALLET_ERROR = 'WALLET_ERROR',
+  TRANSACTION_ERROR = 'TRANSACTION_ERROR',
+  VALIDATION_ERROR = 'VALIDATION_ERROR',
+  SECURITY_EVENT = 'SECURITY_EVENT'
 }
 
 interface SecurityEvent {
@@ -36,6 +40,7 @@ class SecurityLogger {
   private failedAttempts: Map<string, { count: number; firstAttempt: number }> = new Map();
   private readonly MAX_FAILED_ATTEMPTS = 5;
   private readonly BLOCK_DURATION = 3600000; // 1 hour in milliseconds
+  private events: SecurityEvent[] = [];
 
   private constructor() {}
 
@@ -47,6 +52,7 @@ class SecurityLogger {
   }
 
   async logEvent(event: SecurityEvent): Promise<void> {
+    this.events.push(event);
     const logEntry = {
       ...event,
       environment: process.env.NEXT_PUBLIC_APP_ENV || 'development',
@@ -125,6 +131,10 @@ class SecurityLogger {
         }
       }
     }
+  }
+
+  getEvents(): SecurityEvent[] {
+    return [...this.events];
   }
 }
 

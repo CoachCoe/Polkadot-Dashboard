@@ -1,23 +1,51 @@
 import { ApiPromise, WsProvider } from '@polkadot/api';
-import type { Signer } from '@polkadot/api/types';
 import type { SubmittableExtrinsic } from '@polkadot/api/types';
-import type { StakingLedger, UnlockChunk } from '@polkadot/types/interfaces';
-import type { Option } from '@polkadot/types-codec';
-import type { Vec } from '@polkadot/types/codec';
 import { formatBalance, BN } from '@polkadot/util';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import { securityLogger, SecurityEventType } from '@/utils/securityLogger';
+import type { WalletAccount } from '@/services/walletService';
+import { web3Enable, web3Accounts } from '@polkadot/extension-dapp';
+import type { 
+  ValidatorInfo, 
+  StakingInfo, 
+  ChainInfo, 
+  NominatorInfo, 
+  TransactionStatus, 
+  ValidatorIdentity 
+} from '@/types/staking';
+import type { 
+  Referendum, 
+  Track, 
+  DelegationInfo 
+} from '@/types/governance';
+
+// Helper types for runtime type checking
+type StakingModule = NonNullable<ApiPromise['query']['staking']>;
+type StakingQueries = {
+  validators: NonNullable<StakingModule['validators']>;
+  validatorPrefs: NonNullable<StakingModule['validatorPrefs']>;
+  erasStakers: NonNullable<StakingModule['erasStakers']>;
+  activeEra: NonNullable<StakingModule['activeEra']>;
+  erasStakersPayout: NonNullable<StakingModule['erasStakersPayout']>;
+};
 
 // Add consistent logging
-const LOG_PREFIX = '[PolkadotApiService]';
 const log = {
-  info: (message: string, ...args: any[]) => console.log(`${LOG_PREFIX} ${message}`, ...args),
-  error: (message: string, error?: any) => console.error(`${LOG_PREFIX} ${message}`, error || ''),
-  warn: (message: string, ...args: any[]) => console.warn(`${LOG_PREFIX} ${message}`, ...args),
-  debug: (message: string, ...args: any[]) => console.debug(`${LOG_PREFIX} ${message}`, ...args),
-  performance: (operation: string, startTime: number) => {
+  info: (message: string, ...args: any[]) => {
+    console.log(`[PolkadotAPI] ${message}`, ...args);
+  },
+  error: (message: string, ...args: any[]) => {
+    console.error(`[PolkadotAPI] ${message}`, ...args);
+  },
+  warn: (message: string, ...args: any[]) => {
+    console.warn(`[PolkadotAPI] ${message}`, ...args);
+  },
+  debug: (message: string, ...args: any[]) => {
+    console.debug(`[PolkadotAPI] ${message}`, ...args);
+  },
+  performance: (message: string, startTime: number) => {
     const duration = Date.now() - startTime;
-    console.log(`${LOG_PREFIX} Performance - ${operation}: ${duration}ms`);
+    console.log(`[PolkadotAPI] ${message} took ${duration}ms`);
   }
 };
 
@@ -33,54 +61,6 @@ export enum ErrorCode {
   NOT_INITIALIZED = 'NOT_INITIALIZED'
 }
 
-export interface WalletAccount {
-  address: string;
-  name?: string | undefined;
-  source: string;
-}
-
-export interface ChainInfo {
-  name: string;
-  tokenSymbol: string;
-  tokenDecimals: number;
-  ss58Format: number;
-}
-
-export interface TransactionStatus {
-  status: 'ready' | 'broadcast' | 'inBlock' | 'finalized' | 'error';
-  message?: string;
-  blockHash?: string;
-  txHash?: string;
-}
-
-export interface StakingInfo {
-  active: string;
-  total: string;
-  unlocking: Array<{
-    value: string;
-    era: string;
-  }>;
-  rewardDestination?: string;
-  nominatedValidators?: string[];
-}
-
-export interface ValidatorIdentity {
-  display?: string;
-  web?: string;
-  email?: string;
-  twitter?: string;
-}
-
-export interface ValidatorInfo {
-  address: string;
-  identity: ValidatorIdentity | undefined;
-  commission: string;
-  totalStake: string;
-  ownStake: string;
-  nominators: number;
-  blocked: boolean;
-}
-
 class PolkadotApiService {
   private static instance: PolkadotApiService;
   private api: ApiPromise | null = null;
@@ -89,6 +69,7 @@ class PolkadotApiService {
   private reconnectAttempts: number = 0;
   private readonly maxReconnectAttempts: number = 5;
   private readonly reconnectDelay: number = 5000; // 5 seconds
+  private selectedAccount: WalletAccount | null = null;
 
   private constructor() {
     this.wsEndpoint = process.env.NEXT_PUBLIC_POLKADOT_RPC || 'wss://rpc.polkadot.io';
@@ -120,7 +101,7 @@ class PolkadotApiService {
     try {
       const startTime = Date.now();
       if (this.api?.isConnected) {
-        log.debug('Already connected to Polkadot network');
+        log.info('Already connected to Polkadot network');
         return this.api;
       }
 
@@ -245,9 +226,6 @@ class PolkadotApiService {
     log.info('Initializing wallet...');
 
     try {
-      // Dynamically import extension-dapp
-      const { web3Enable, web3Accounts } = await import('@polkadot/extension-dapp');
-
       // Enable all available extensions
       const extensions = await web3Enable('Polkadot Dashboard');
       if (extensions.length === 0) {
@@ -272,10 +250,16 @@ class PolkadotApiService {
       const validatedAccounts = accounts
         .map(acc => {
           try {
+            const meta = {
+              source: acc.meta.source,
+              ...(acc.meta.name ? { name: acc.meta.name } : {}),
+              ...(acc.meta.genesisHash ? { genesisHash: acc.meta.genesisHash } : {})
+            };
+
             const account: WalletAccount = {
-              address: acc.address,
-              name: acc.meta.name,
-              source: acc.meta.source
+              ...acc,
+              provider: acc.meta.source,
+              meta
             };
             return account;
           } catch (error) {
@@ -306,9 +290,9 @@ class PolkadotApiService {
       }
 
       throw new PolkadotHubError(
-        errorMessage,
+        'Failed to initialize wallet',
         ErrorCodes.WALLET.CONNECTION_ERROR,
-        'Failed to initialize wallet'
+        errorMessage
       );
     }
   }
@@ -346,459 +330,227 @@ class PolkadotApiService {
     }
   }
 
-  async getStakingInfo(address: string): Promise<StakingInfo | null> {
-    try {
-      const api = await this.getApi();
-      if (!api.query.staking?.ledger || !api.query.staking?.nominators || !api.query.staking?.payee) {
-        throw new Error('Staking queries not available');
-      }
-
-      const stakingLedger = await api.query.staking.ledger<Option<StakingLedger>>(address);
-      
-      if (!stakingLedger.isSome) return null;
-
-      const ledger = stakingLedger.unwrap();
-      const nominations = await api.query.staking.nominators(address) as Option<any>;
-      const payee = await api.query.staking.payee(address);
-
-      return {
-        active: formatBalance(ledger.active, { withUnit: false }),
-        total: formatBalance(ledger.total, { withUnit: false }),
-        unlocking: ledger.unlocking.map((chunk: UnlockChunk) => ({
-          value: formatBalance(chunk.value, { withUnit: false }),
-          era: chunk.era.toString()
-        })),
-        rewardDestination: payee.toString(),
-        nominatedValidators: nominations.isSome ? nominations.unwrap().targets.map((v: any) => v.toString()) : []
-      };
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      log.error('Failed to get staking information:', error);
+  async getStakingInfo(): Promise<StakingInfo> {
+    const api = await this.getApi();
+    
+    if (!api.query.staking) {
       throw new PolkadotHubError(
-        errorMessage,
+        'Staking module not available',
         ErrorCodes.API.ERROR,
-        'Failed to get staking information'
+        'Required staking queries are not available'
       );
     }
+
+    const stakingQuery = api.query.staking;
+
+    if (!stakingQuery.activeEra || !stakingQuery.erasTotalStake || !stakingQuery.erasValidatorReward || !stakingQuery.minNominatorBond || !stakingQuery.maxNominators || !stakingQuery.unbondingDuration) {
+      throw new PolkadotHubError(
+        'Required staking queries not available',
+        ErrorCodes.API.ERROR,
+        'Required staking queries are not available'
+      );
+    }
+
+    const activeEraResult = await stakingQuery.activeEra();
+    const activeEra = (activeEraResult as any).unwrapOr({ index: new BN(0) });
+    const eraIndex = activeEra.index.toNumber();
+
+    const [
+      totalStaked,
+      rewardRate,
+      minNomination,
+      maxNominators,
+      unbondingDuration
+    ] = await Promise.all([
+      stakingQuery.erasTotalStake(eraIndex),
+      stakingQuery.erasValidatorReward(eraIndex),
+      stakingQuery.minNominatorBond(),
+      stakingQuery.maxNominators(),
+      stakingQuery.unbondingDuration()
+    ]);
+
+    return {
+      totalStaked: totalStaked.toString(),
+      activeEra: eraIndex,
+      rewardRate: rewardRate.toString(),
+      minNomination: minNomination.toString(),
+      maxNominators: (maxNominators as any).toNumber(),
+      unbondingDuration: (unbondingDuration as any).toNumber()
+    };
+  }
+
+  private getStakingModule(api: ApiPromise): StakingQueries {
+    return this.assertStakingQueries(api);
   }
 
   async getValidators(): Promise<ValidatorInfo[]> {
-    const startTime = Date.now();
-    log.info('Fetching validator information...');
+    const api = await this.getApi();
+    const stakingModule = this.getStakingModule(api);
 
     try {
-      const api = await this.getApi();
-      const queries = api.query;
-      
-      if (!queries.session?.validators || !queries.staking?.activeEra || 
-          !queries.staking?.validators || !queries.staking?.erasStakers || 
-          !queries.identity?.identityOf) {
-        throw new PolkadotHubError(
-          'Required queries not available',
-          ErrorCodes.API.ERROR,
-          'Cannot fetch validator information'
-        );
-      }
-
-      // Create type-safe query objects
-      const sessionQueries = {
-        validators: queries.session.validators.bind(queries.session)
-      };
-
-      const stakingQueries = {
-        activeEra: queries.staking.activeEra.bind(queries.staking),
-        validators: queries.staking.validators.bind(queries.staking),
-        erasStakers: queries.staking.erasStakers.bind(queries.staking)
-      };
-
-      const identityQueries = {
-        identityOf: queries.identity.identityOf.bind(queries.identity)
-      };
-
-      // Get current validators and era
-      const [validators, eraResult] = await Promise.all([
-        sessionQueries.validators(),
-        stakingQueries.activeEra()
-      ]);
-
-      const era = (eraResult.toJSON() as { index: number } | null);
-      if (!era) {
-        throw new PolkadotHubError(
-          'Cannot determine current era',
-          ErrorCodes.API.ERROR,
-          'Failed to get current era information'
-        );
-      }
-
-      const validatorAddresses = (validators as Vec<any>).map((v: any) => v.toString());
-      log.debug(`Found ${validatorAddresses.length} active validators`);
-
-      // Fetch validator details in batches to avoid overwhelming the node
-      const batchSize = 50;
-      const validatorInfos: ValidatorInfo[] = [];
-
-      for (let i = 0; i < validatorAddresses.length; i += batchSize) {
-        const batch = validatorAddresses.slice(i, i + batchSize);
-        const batchResults = await Promise.all(
-          batch.map(async (address: string) => {
-            try {
-              const [prefs, exposure, identity] = await Promise.all([
-                stakingQueries.validators(address),
-                stakingQueries.erasStakers(era.index, address),
-                identityQueries.identityOf(address)
-              ]);
-
-              const prefsJson = prefs.toJSON() as { commission: number; blocked: boolean };
-              const exposureJson = exposure.toJSON() as { total: string; own: string; others: any[] };
-              const validatorIdentity = this.parseIdentity(identity);
-
-              const validatorInfo: ValidatorInfo = {
-                address,
-                identity: validatorIdentity,
-                commission: prefsJson.commission.toString(),
-                totalStake: formatBalance(exposureJson.total, { withUnit: false }),
-                ownStake: formatBalance(exposureJson.own, { withUnit: false }),
-                nominators: exposureJson.others.length,
-                blocked: prefsJson.blocked
-              };
-
-              return validatorInfo;
-            } catch (error) {
-              log.warn(`Failed to fetch details for validator ${address}:`, error);
+      const validators = await stakingModule.validators.entries();
+      const validatorInfos = await Promise.all(
+        validators.map(async ([key, _]) => {
+          try {
+            // Runtime check for key structure
+            if (!key?.args?.[0]?.toString) {
+              console.error('Invalid validator key format');
               return null;
             }
-          })
-        );
 
-        const validResults = batchResults.filter((info): info is ValidatorInfo => info !== null);
-        validatorInfos.push(...validResults);
-        log.debug(`Processed ${i + batch.length}/${validatorAddresses.length} validators`);
-      }
+            const address = key.args[0].toString();
+            
+            // Safe query calls with fallbacks
+            const [identity, commission, activeEraOpt] = await Promise.all([
+              api.query.identity?.identityOf?.(address) || Promise.resolve(null),
+              stakingModule.validatorPrefs(address),
+              stakingModule.activeEra()
+            ]);
 
-      log.info(`Successfully fetched information for ${validatorInfos.length} validators`);
-      log.performance('Validator information retrieval', startTime);
+            let exposure = null;
+            if (activeEraOpt) {
+              try {
+                // We know these methods exist on Polkadot types
+                const activeEra = (activeEraOpt as unknown as { unwrap: () => any }).unwrap();
+                exposure = await stakingModule.erasStakers(activeEra, address);
+              } catch (error) {
+                console.error('Failed to get era stakers:', error);
+              }
+            }
 
-      return validatorInfos;
+            // Safe data extraction with fallbacks
+            const validatorInfo: ValidatorInfo = {
+              address,
+              commission: (commission as any)?.commission?.toString() || '0',
+              totalStake: (exposure as any)?.total?.toString() || '0',
+              nominators: (exposure as any)?.others?.length || 0,
+              isActive: true,
+              rewardPoints: '0'
+            };
+
+            // Safe identity extraction
+            try {
+              if (identity) {
+                const identityInfo = (identity as unknown as { unwrapOr: (defaultValue: any) => any })
+                  .unwrapOr(null)?.info?.toHuman();
+                if (identityInfo) {
+                  validatorInfo.identity = identityInfo as ValidatorIdentity;
+                }
+              }
+            } catch (error) {
+              console.error('Failed to process identity info:', error);
+            }
+
+            return validatorInfo;
+          } catch (error) {
+            console.error('Failed to process validator:', error);
+            return null;
+          }
+        })
+      );
+
+      return validatorInfos.filter((info): info is ValidatorInfo => info !== null);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      log.error('Failed to get validator information:', error);
-
-      if (error instanceof PolkadotHubError) {
-        throw error;
-      }
-
       throw new PolkadotHubError(
-        errorMessage,
+        'Failed to fetch validator info',
         ErrorCodes.API.ERROR,
-        'Failed to fetch validator information'
+        error instanceof Error ? error.message : 'Unknown error occurred'
       );
     }
   }
 
-  private parseIdentity(identity: any): ValidatorIdentity | undefined {
-    if (!identity || !identity.isSome) {
-      return undefined;
+  async stake(amount: string, validators: string[]): Promise<void> {
+    const api = await this.getApi();
+    if (!api.tx.staking?.bond || !api.tx.staking?.nominate) {
+      throw new PolkadotHubError(
+        'Staking module not available',
+        ErrorCodes.API.ERROR,
+        'Required staking transactions are not available'
+      );
     }
 
-    try {
-      const info = identity.unwrap().info;
-      return {
-        display: info.display.isRaw ? info.display.asRaw.toHuman() : undefined,
-        web: info.web.isRaw ? info.web.asRaw.toHuman() : undefined,
-        email: info.email.isRaw ? info.email.asRaw.toHuman() : undefined,
-        twitter: info.twitter.isRaw ? info.twitter.asRaw.toHuman() : undefined
-      };
-    } catch (error) {
-      log.warn('Failed to parse validator identity:', error);
-      return undefined;
+    if (!this.selectedAccount?.address) {
+      throw new PolkadotHubError(
+        'No account selected',
+        ErrorCodes.WALLET.NOT_CONNECTED,
+        'Please connect your wallet to stake'
+      );
     }
+
+    const tx = api.tx.staking.bond(amount);
+    await this.signAndSend(tx, this.selectedAccount.address);
+
+    const nominateTx = api.tx.staking.nominate(validators);
+    await this.signAndSend(nominateTx, this.selectedAccount.address);
   }
 
-  async stake(
-    address: string,
-    amount: string,
-    validators: string[],
-    onStatusChange?: (status: TransactionStatus) => void
-  ): Promise<void> {
-    const startTime = Date.now();
-    log.info(`Initiating staking operation for address: ${address}`);
-
-    try {
-      // Validate inputs
-      if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-        throw new PolkadotHubError(
-          'Invalid staking amount',
-          ErrorCodes.VALIDATION.INVALID_AMOUNT,
-          'Staking amount must be a positive number'
-        );
-      }
-
-      if (!validators || validators.length === 0) {
-        throw new PolkadotHubError(
-          'No validators specified',
-          ErrorCodes.VALIDATION.INVALID_PARAMETER,
-          'At least one validator must be selected'
-        );
-      }
-
-      const api = await this.getApi();
-      const { web3FromAddress } = await import('@polkadot/extension-dapp');
-      const injector = await web3FromAddress(address);
-      
-      if (!api.tx.staking?.bond || !api.tx.staking?.nominate || !api.tx.utility?.batch) {
-        throw new PolkadotHubError(
-          'Required transactions not available',
-          ErrorCodes.API.ERROR,
-          'Staking functionality is not available'
-        );
-      }
-
-      // Validate minimum staking amount
-      if (!api.consts.staking?.minNominatorBond) {
-        throw new PolkadotHubError(
-          'Cannot determine minimum staking amount',
-          ErrorCodes.API.ERROR,
-          'Required staking constants not available'
-        );
-      }
-
-      const minimumStake = api.consts.staking.minNominatorBond;
-      const minimumStakeBN = new BN(minimumStake.toHex());
-      if (new BN(amount).lt(minimumStakeBN)) {
-        throw new PolkadotHubError(
-          'Insufficient staking amount',
-          ErrorCodes.VALIDATION.INVALID_AMOUNT,
-          `Minimum staking amount is ${formatBalance(minimumStakeBN)}`
-        );
-      }
-
-      // Validate validators
-      const validatorSet = new Set(validators);
-      if (validatorSet.size !== validators.length) {
-        throw new PolkadotHubError(
-          'Duplicate validators',
-          ErrorCodes.VALIDATION.INVALID_PARAMETER,
-          'Validator list contains duplicates'
-        );
-      }
-
-      // Create and submit the batch transaction
-      const bondTx = api.tx.staking.bond(amount, 'Staked');
-      const nominateTx = api.tx.staking.nominate(Array.from(validatorSet));
-      const batch = api.tx.utility.batch([bondTx, nominateTx]);
-
-      log.info('Submitting staking transaction...');
-      await this.signAndSend(batch, address, injector.signer, onStatusChange);
-      log.performance('Staking operation', startTime);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      log.error('Failed to stake tokens:', error);
-
-      if (error instanceof PolkadotHubError) {
-        throw error;
-      }
-
+  async unstake(amount: string): Promise<void> {
+    const api = await this.getApi();
+    if (!api.tx.staking?.unbond) {
       throw new PolkadotHubError(
-        errorMessage,
+        'Staking module not available',
         ErrorCodes.API.ERROR,
-        'Failed to stake tokens'
+        'Required staking transactions are not available'
       );
     }
+
+    if (!this.selectedAccount?.address) {
+      throw new PolkadotHubError(
+        'No account selected',
+        ErrorCodes.WALLET.NOT_CONNECTED,
+        'Please connect your wallet to unstake'
+      );
+    }
+
+    const tx = api.tx.staking.unbond(amount);
+    await this.signAndSend(tx, this.selectedAccount.address);
   }
 
-  async unstake(
-    address: string,
-    amount: string,
-    onStatusChange?: (status: TransactionStatus) => void
-  ): Promise<void> {
-    const startTime = Date.now();
-    log.info(`Initiating unstaking operation for address: ${address}`);
-
-    try {
-      // Validate amount
-      if (!amount || isNaN(Number(amount)) || Number(amount) <= 0) {
-        throw new PolkadotHubError(
-          'Invalid unstaking amount',
-          ErrorCodes.VALIDATION.INVALID_AMOUNT,
-          'Unstaking amount must be a positive number'
-        );
-      }
-
-      const api = await this.getApi();
-      const { web3FromAddress } = await import('@polkadot/extension-dapp');
-      const injector = await web3FromAddress(address);
-      
-      if (!api.tx.staking?.unbond) {
-        throw new PolkadotHubError(
-          'Required transactions not available',
-          ErrorCodes.API.ERROR,
-          'Unstaking functionality is not available'
-        );
-      }
-
-      // Get current bonded balance
-      const stakingInfo = await this.getStakingInfo(address);
-      if (!stakingInfo || !stakingInfo.active) {
-        throw new PolkadotHubError(
-          'No active stake',
-          ErrorCodes.VALIDATION.INVALID_STATE,
-          'No active stake found for this address'
-        );
-      }
-
-      const activeStake = new BN(stakingInfo.active);
-      const unstakeAmount = new BN(amount);
-
-      if (unstakeAmount.gt(activeStake)) {
-        throw new PolkadotHubError(
-          'Insufficient staked balance',
-          ErrorCodes.VALIDATION.INVALID_AMOUNT,
-          `Cannot unstake more than the active stake: ${formatBalance(activeStake)}`
-        );
-      }
-
-      log.info('Submitting unstaking transaction...');
-      const tx = api.tx.staking.unbond(amount);
-      await this.signAndSend(tx, address, injector.signer, onStatusChange);
-      log.performance('Unstaking operation', startTime);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      log.error('Failed to unstake tokens:', error);
-
-      if (error instanceof PolkadotHubError) {
-        throw error;
-      }
-
+  async withdrawUnstaked(): Promise<void> {
+    const api = await this.getApi();
+    if (!api.tx.staking?.withdrawUnbonded) {
       throw new PolkadotHubError(
-        errorMessage,
+        'Staking module not available',
         ErrorCodes.API.ERROR,
-        'Failed to unstake tokens'
+        'Required staking transactions are not available'
       );
     }
-  }
 
-  async withdrawUnbonded(
-    address: string,
-    onStatusChange?: (status: TransactionStatus) => void
-  ): Promise<void> {
-    const startTime = Date.now();
-    log.info(`Initiating withdrawal of unbonded tokens for address: ${address}`);
-
-    try {
-      const api = await this.getApi();
-      const { web3FromAddress } = await import('@polkadot/extension-dapp');
-      const injector = await web3FromAddress(address);
-      
-      if (!api.tx.staking?.withdrawUnbonded || !api.query.staking?.activeEra) {
-        throw new PolkadotHubError(
-          'Required transactions not available',
-          ErrorCodes.API.ERROR,
-          'Withdrawal functionality is not available'
-        );
-      }
-
-      // Check if there are any unbonded funds
-      const stakingInfo = await this.getStakingInfo(address);
-      if (!stakingInfo || !stakingInfo.unlocking || stakingInfo.unlocking.length === 0) {
-        throw new PolkadotHubError(
-          'No unbonded funds',
-          ErrorCodes.VALIDATION.INVALID_STATE,
-          'No unbonded funds available for withdrawal'
-        );
-      }
-
-      // Get current era
-      const activeEraResult = await api.query.staking.activeEra();
-      const activeEra = activeEraResult.toJSON() as { index: number } | null;
-      
-      if (!activeEra) {
-        throw new PolkadotHubError(
-          'Cannot determine current era',
-          ErrorCodes.API.ERROR,
-          'Failed to get current era information'
-        );
-      }
-
-      const currentEra = activeEra.index;
-      const hasWithdrawableUnlocks = stakingInfo.unlocking.some(chunk => 
-        Number(chunk.era) <= currentEra
-      );
-
-      if (!hasWithdrawableUnlocks) {
-        throw new PolkadotHubError(
-          'No withdrawable funds',
-          ErrorCodes.VALIDATION.INVALID_STATE,
-          'No unbonded funds are currently available for withdrawal'
-        );
-      }
-
-      log.info('Submitting withdrawal transaction...');
-      const tx = api.tx.staking.withdrawUnbonded(0);
-      await this.signAndSend(tx, address, injector.signer, onStatusChange);
-      log.performance('Withdrawal operation', startTime);
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      log.error('Failed to withdraw unbonded tokens:', error);
-
-      if (error instanceof PolkadotHubError) {
-        throw error;
-      }
-
+    if (!this.selectedAccount?.address) {
       throw new PolkadotHubError(
-        errorMessage,
-        ErrorCodes.API.ERROR,
-        'Failed to withdraw unbonded tokens'
+        'No account selected',
+        ErrorCodes.WALLET.NOT_CONNECTED,
+        'Please connect your wallet to withdraw'
       );
     }
+
+    const tx = api.tx.staking.withdrawUnbonded();
+    await this.signAndSend(tx, this.selectedAccount.address);
   }
 
   private async signAndSend(
     tx: SubmittableExtrinsic<'promise'>,
     address: string,
-    signer: Signer,
     onStatusChange?: (status: TransactionStatus) => void
   ): Promise<void> {
     const startTime = Date.now();
     log.info('Signing and sending transaction...');
 
-    if (!this.api) {
-      throw new PolkadotHubError(
-        'API not initialized',
-        ErrorCodes.API.ERROR,
-        'Cannot send transaction without API connection'
-      );
-    }
-
-    const api = this.api; // Create a stable reference
-    const systemEvents = api.events?.system;
-
-    if (!systemEvents?.ExtrinsicSuccess) {
-      throw new PolkadotHubError(
-        'Required API events not available',
-        ErrorCodes.API.ERROR,
-        'Cannot monitor transaction status without system events'
-      );
-    }
-
-    // Create a stable reference to the ExtrinsicSuccess event
-    const extrinsicSuccess = systemEvents.ExtrinsicSuccess;
+    const api = await this.getApi();
 
     return new Promise((resolve, reject) => {
-      tx.signAndSend(address, { signer }, ({ status, dispatchError, events }) => {
+      tx.signAndSend(address, {}, ({ status, dispatchError, events }) => {
         try {
           if (status.isReady) {
             log.debug('Transaction is ready to be broadcast');
-            onStatusChange?.({ status: 'ready' });
+            onStatusChange?.({ isReady: true, isInBlock: false, isFinalized: false });
           } else if (status.isBroadcast) {
             log.debug('Transaction has been broadcast');
-            onStatusChange?.({ status: 'broadcast' });
+            onStatusChange?.({ isReady: true, isInBlock: false, isFinalized: false });
           } else if (status.isInBlock) {
             const blockHash = status.asInBlock.toHex();
             log.debug(`Transaction included in block: ${blockHash}`);
-            onStatusChange?.({
-              status: 'inBlock',
-              blockHash
-            });
+            onStatusChange?.({ isReady: true, isInBlock: true, isFinalized: false });
           } else if (status.isFinalized) {
             const blockHash = status.asFinalized.toHex();
             
@@ -808,36 +560,31 @@ class PolkadotApiService {
                 : dispatchError.toString();
               
               log.error(`Transaction failed: ${errorMessage}`);
-              onStatusChange?.({
-                status: 'error',
-                message: errorMessage,
-                blockHash
-              });
+              onStatusChange?.({ isReady: true, isInBlock: true, isFinalized: true, error: errorMessage });
               reject(new PolkadotHubError(
                 errorMessage,
                 ErrorCodes.API.ERROR,
                 'Transaction failed after finalization'
               ));
             } else {
-              // Process events to ensure transaction success
-              const success = events.some(({ event }) => extrinsicSuccess.is(event));
+              // Safe event checking
+              const success = api.events?.system?.ExtrinsicSuccess && events.some(({ event }) => {
+                try {
+                  return api.events?.system?.ExtrinsicSuccess?.is(event);
+                } catch {
+                  return false;
+                }
+              });
 
               if (success) {
                 log.info(`Transaction finalized in block: ${blockHash}`);
                 log.performance('Transaction completion', startTime);
-                onStatusChange?.({
-                  status: 'finalized',
-                  blockHash
-                });
+                onStatusChange?.({ isReady: true, isInBlock: true, isFinalized: true });
                 resolve();
               } else {
                 const errorMessage = 'Transaction finalized but no success event found';
                 log.error(errorMessage);
-                onStatusChange?.({
-                  status: 'error',
-                  message: errorMessage,
-                  blockHash
-                });
+                onStatusChange?.({ isReady: true, isInBlock: true, isFinalized: true, error: errorMessage });
                 reject(new PolkadotHubError(
                   errorMessage,
                   ErrorCodes.API.ERROR,
@@ -849,10 +596,7 @@ class PolkadotApiService {
         } catch (error) {
           const errorMessage = error instanceof Error ? error.message : String(error);
           log.error('Error processing transaction status:', error);
-          onStatusChange?.({
-            status: 'error',
-            message: errorMessage
-          });
+          onStatusChange?.({ isReady: false, isInBlock: false, isFinalized: false, error: errorMessage });
           reject(new PolkadotHubError(
             errorMessage,
             ErrorCodes.API.ERROR,
@@ -862,10 +606,7 @@ class PolkadotApiService {
       }).catch(error => {
         const errorMessage = error instanceof Error ? error.message : String(error);
         log.error('Transaction submission failed:', error);
-        onStatusChange?.({
-          status: 'error',
-          message: errorMessage
-        });
+        onStatusChange?.({ isReady: false, isInBlock: false, isFinalized: false, error: errorMessage });
         reject(new PolkadotHubError(
           errorMessage,
           ErrorCodes.API.ERROR,
@@ -915,6 +656,416 @@ class PolkadotApiService {
         'Failed to disconnect from network'
       );
     }
+  }
+
+  async getNominatorInfo(address: string): Promise<NominatorInfo> {
+    const api = await this.getApi();
+    
+    if (!api.query.staking) {
+      throw new PolkadotHubError(
+        'Staking module not available',
+        ErrorCodes.API.ERROR,
+        'Required staking queries are not available'
+      );
+    }
+
+    const stakingQuery = api.query.staking;
+
+    if (!stakingQuery.nominators || !stakingQuery.ledger || !stakingQuery.activeEra || !stakingQuery.erasStakersPayout) {
+      throw new PolkadotHubError(
+        'Required staking queries not available',
+        ErrorCodes.API.ERROR,
+        'Required staking queries are not available'
+      );
+    }
+
+    try {
+      const [nominations, ledger, activeEra] = await Promise.all([
+        stakingQuery.nominators(address),
+        stakingQuery.ledger(address),
+        stakingQuery.activeEra()
+      ]);
+
+      if (!nominations || !ledger || !activeEra) {
+        throw new PolkadotHubError(
+          'Failed to fetch nominator data',
+          ErrorCodes.API.ERROR,
+          'Could not retrieve nominator information'
+        );
+      }
+
+      const currentEra = (activeEra as any).unwrap().index.toNumber();
+      const lastEraReward = await stakingQuery.erasStakersPayout(currentEra - 1, address);
+
+      const nominationsData = (nominations as any).unwrap();
+      const ledgerData = (ledger as any).unwrap();
+
+      if (!nominationsData || !ledgerData) {
+        throw new PolkadotHubError(
+          'Invalid nominator data format',
+          ErrorCodes.API.ERROR,
+          'Could not parse nominator information'
+        );
+      }
+
+      return {
+        targets: nominationsData.targets.map((t: any) => t.toString()),
+        totalStaked: ledgerData.active.toString(),
+        rewards: {
+          lastEra: lastEraReward.toString(),
+          totalRewards: '0' // This would need to be calculated by summing historical rewards
+        },
+        status: 'active', // This should be determined by checking various conditions
+        unlocking: ledgerData.unlocking.map((u: any) => ({
+          value: u.value.toString(),
+          era: u.era.toNumber()
+        }))
+      };
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to process nominator info',
+        ErrorCodes.API.ERROR,
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      );
+    }
+  }
+
+  async getHistoricalRewards(address: string, startEra: number, endEra: number) {
+    const api = await this.getApi();
+    const stakingModule = this.getStakingModule(api);
+
+    try {
+      const rewards = await Promise.all(
+        Array.from({ length: endEra - startEra + 1 }, async (_, i) => {
+          try {
+            const reward = await stakingModule.erasStakersPayout(startEra + i, address);
+            return {
+              era: startEra + i,
+              amount: reward?.toString() || '0'
+            };
+          } catch (error) {
+            console.error(`Failed to fetch rewards for era ${startEra + i}:`, error);
+            return {
+              era: startEra + i,
+              amount: '0'
+            };
+          }
+        })
+      );
+
+      return rewards;
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to fetch historical rewards',
+        ErrorCodes.API.ERROR,
+        error instanceof Error ? error.message : 'Unknown error occurred'
+      );
+    }
+  }
+
+  async getReferenda(): Promise<Referendum[]> {
+    const api = await this.getApi();
+    
+    if (!api.query.referenda?.referendumInfoFor) {
+      throw new PolkadotHubError(
+        'Referenda module not available',
+        ErrorCodes.API.ERROR,
+        'Required referenda queries are not available'
+      );
+    }
+
+    const referenda = await api.query.referenda.referendumInfoFor.entries();
+    return referenda.map(([key, info]) => {
+      const index = (key.args[0] as any).toNumber();
+      const data = (info as any).unwrap();
+      
+      // Handle optional fields with type checking
+      const status = data.status?.toString() || 'ongoing';
+      const trackId = data.trackId?.toNumber() || 0;
+      const proposer = data.proposer?.toString() || '';
+      const deposit = data.deposit?.toString() || '0';
+      const enactmentDelay = data.enactmentDelay?.toNumber() || 0;
+      const voteStart = data.voteStart?.toNumber() || 0;
+      const voteEnd = data.voteEnd?.toNumber() || 0;
+      const ayes = data.ayes?.toString() || '0';
+      const nays = data.nays?.toString() || '0';
+      const turnout = data.turnout?.toString() || '0';
+      const title = data.title?.toString() || '';
+      const description = data.description?.toString() || '';
+
+      return {
+        index,
+        title,
+        description,
+        status: status as 'ongoing' | 'completed' | 'cancelled',
+        trackId,
+        proposer,
+        deposit,
+        enactmentDelay,
+        voteStart,
+        voteEnd,
+        ayes,
+        nays,
+        turnout
+      };
+    });
+  }
+
+  async getTracks(): Promise<Track[]> {
+    const api = await this.getApi();
+    
+    if (!api.query.referenda?.tracks) {
+      throw new PolkadotHubError(
+        'Referenda module not available',
+        ErrorCodes.API.ERROR,
+        'Required referenda queries are not available'
+      );
+    }
+
+    const tracks = await api.query.referenda.tracks.entries();
+    return tracks.map(([key, info]) => {
+      const id = (key.args[0] as any).toNumber();
+      const data = (info as any).unwrap();
+
+      // Handle optional fields with type checking
+      const name = data.name?.toString() || '';
+      const description = data.description?.toString() || '';
+      const minDeposit = data.minDeposit?.toString() || '0';
+      const decisionPeriod = data.decisionPeriod?.toNumber() || 0;
+      const preparePeriod = data.preparePeriod?.toNumber() || 0;
+      const enactmentPeriod = data.enactmentPeriod?.toNumber() || 0;
+      const minApproval = data.minApproval?.toNumber() || 0;
+      const minSupport = data.minSupport?.toNumber() || 0;
+
+      return {
+        id,
+        name,
+        description,
+        minDeposit,
+        decisionPeriod,
+        preparePeriod,
+        enactmentPeriod,
+        minApproval,
+        minSupport
+      };
+    });
+  }
+
+  async getDelegations(address?: string): Promise<DelegationInfo[]> {
+    if (!address) return [];
+
+    const api = await this.getApi();
+    if (!api.query.convictionVoting?.votingFor) {
+      throw new PolkadotHubError(
+        'Conviction voting module not available',
+        ErrorCodes.API.ERROR,
+        'Required conviction voting queries are not available'
+      );
+    }
+
+    const delegations = await api.query.convictionVoting.votingFor.entries(address);
+    return delegations.map(([key, info]) => {
+      const trackId = (key.args[1] as any).toNumber();
+      const data = (info as any).unwrap();
+
+      // Handle optional fields with type checking
+      const target = data.target?.toString() || '';
+      const amount = data.amount?.toString() || '0';
+      const conviction = data.conviction?.toNumber() || 0;
+      const delegatedAt = data.delegatedAt?.toNumber() || 0;
+
+      return {
+        trackId,
+        target,
+        amount,
+        conviction,
+        delegatedAt
+      };
+    });
+  }
+
+  async vote(referendumIndex: number, vote: boolean, conviction: number): Promise<void> {
+    const api = await this.getApi();
+    if (!api.tx.convictionVoting?.vote) {
+      throw new PolkadotHubError(
+        'Conviction voting module not available',
+        ErrorCodes.API.ERROR,
+        'Required conviction voting transactions are not available'
+      );
+    }
+
+    if (!this.selectedAccount?.address) {
+      throw new PolkadotHubError(
+        'No account selected',
+        ErrorCodes.WALLET.NOT_CONNECTED,
+        'Please connect your wallet to vote'
+      );
+    }
+
+    const tx = api.tx.convictionVoting.vote(referendumIndex, { Standard: { vote, conviction } });
+    await this.signAndSend(tx, this.selectedAccount.address);
+  }
+
+  async delegate(trackId: number, target: string, amount: string, conviction: number): Promise<void> {
+    const api = await this.getApi();
+    if (!api.tx.convictionVoting?.delegate) {
+      throw new PolkadotHubError(
+        'Conviction voting module not available',
+        ErrorCodes.API.ERROR,
+        'Required conviction voting transactions are not available'
+      );
+    }
+
+    if (!this.selectedAccount?.address) {
+      throw new PolkadotHubError(
+        'No account selected',
+        ErrorCodes.WALLET.NOT_CONNECTED,
+        'Please connect your wallet to delegate'
+      );
+    }
+
+    const tx = api.tx.convictionVoting.delegate(trackId, target, conviction, amount);
+    await this.signAndSend(tx, this.selectedAccount.address);
+  }
+
+  async undelegate(trackId: number): Promise<void> {
+    const api = await this.getApi();
+    if (!api.tx.convictionVoting?.undelegate) {
+      throw new PolkadotHubError(
+        'Conviction voting module not available',
+        ErrorCodes.API.ERROR,
+        'Required conviction voting transactions are not available'
+      );
+    }
+
+    if (!this.selectedAccount?.address) {
+      throw new PolkadotHubError(
+        'No account selected',
+        ErrorCodes.WALLET.NOT_CONNECTED,
+        'Please connect your wallet to undelegate'
+      );
+    }
+
+    const tx = api.tx.convictionVoting.undelegate(trackId);
+    await this.signAndSend(tx, this.selectedAccount.address);
+  }
+
+  async bond(account: WalletAccount, amount: string, controller?: string) {
+    const api = await this.getApi();
+    
+    if (!api.tx.staking?.bond) {
+      throw new PolkadotHubError(
+        'Staking module not available',
+        ErrorCodes.API.ERROR,
+        'Required staking transactions are not available'
+      );
+    }
+
+    if (!account.address) {
+      throw new PolkadotHubError(
+        'Invalid account',
+        ErrorCodes.WALLET.NOT_CONNECTED,
+        'Account address is required'
+      );
+    }
+
+    return controller
+      ? api.tx.staking.bond(controller, amount, 'Staked')
+      : api.tx.staking.bond(account.address, amount, 'Staked');
+  }
+
+  async nominate(account: WalletAccount, targets: string[]) {
+    const api = await this.getApi();
+    
+    if (!api.tx.staking?.nominate) {
+      throw new PolkadotHubError(
+        'Staking module not available',
+        ErrorCodes.API.ERROR,
+        'Required staking transactions are not available'
+      );
+    }
+
+    if (!account.address) {
+      throw new PolkadotHubError(
+        'Invalid account',
+        ErrorCodes.WALLET.NOT_CONNECTED,
+        'Account address is required'
+      );
+    }
+
+    return api.tx.staking.nominate(targets);
+  }
+
+  async unbond(account: WalletAccount, amount: string) {
+    const api = await this.getApi();
+    
+    if (!api.tx.staking?.unbond) {
+      throw new PolkadotHubError(
+        'Staking module not available',
+        ErrorCodes.API.ERROR,
+        'Required staking transactions are not available'
+      );
+    }
+
+    if (!account.address) {
+      throw new PolkadotHubError(
+        'Invalid account',
+        ErrorCodes.WALLET.NOT_CONNECTED,
+        'Account address is required'
+      );
+    }
+
+    return api.tx.staking.unbond(amount);
+  }
+
+  async withdrawUnbonded(account: WalletAccount, numSlashingSpans: number) {
+    const api = await this.getApi();
+    
+    if (!api.tx.staking?.withdrawUnbonded) {
+      throw new PolkadotHubError(
+        'Staking module not available',
+        ErrorCodes.API.ERROR,
+        'Required staking transactions are not available'
+      );
+    }
+
+    if (!account.address) {
+      throw new PolkadotHubError(
+        'Invalid account',
+        ErrorCodes.WALLET.NOT_CONNECTED,
+        'Account address is required'
+      );
+    }
+
+    return api.tx.staking.withdrawUnbonded(numSlashingSpans);
+  }
+
+  private assertStakingQueries(api: ApiPromise): StakingQueries {
+    if (!api.query.staking) {
+      throw new PolkadotHubError(
+        'Staking module not available',
+        ErrorCodes.API.ERROR,
+        'Required staking queries are not available'
+      );
+    }
+
+    const query = api.query.staking;
+    if (!query.validators || !query.validatorPrefs || 
+        !query.erasStakers || !query.activeEra || !query.erasStakersPayout) {
+      throw new PolkadotHubError(
+        'Required staking queries not available',
+        ErrorCodes.API.ERROR,
+        'One or more required staking queries are not available'
+      );
+    }
+
+    return {
+      validators: query.validators,
+      validatorPrefs: query.validatorPrefs,
+      erasStakers: query.erasStakers,
+      activeEra: query.activeEra,
+      erasStakersPayout: query.erasStakersPayout
+    };
   }
 }
 

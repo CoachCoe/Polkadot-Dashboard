@@ -1,12 +1,9 @@
 'use client';
 import { useState, useEffect, useCallback } from 'react';
-import polkadotApiService, {
-  WalletAccount,
-  ChainInfo,
-  StakingInfo,
-  ValidatorInfo,
-  TransactionStatus
-} from '@/services/polkadotApiService';
+import { useWalletStore } from '@/store/useWalletStore';
+import polkadotApiService from '@/services/polkadotApiService';
+import type { ChainInfo, StakingInfo, ValidatorInfo } from '@/types/staking';
+import type { WalletAccount } from '@/services/walletService';
 
 interface UsePolkadotReturn {
   isConnected: boolean;
@@ -20,7 +17,7 @@ interface UsePolkadotReturn {
   connectWallet: () => Promise<void>;
   selectAccount: (account: WalletAccount) => void;
   getBalance: (address: string) => Promise<string>;
-  getStakingInfo: (address: string) => Promise<StakingInfo | null>;
+  getStakingInfo: () => Promise<StakingInfo | null>;
   getValidators: () => Promise<ValidatorInfo[]>;
   stake: (amount: string, validators: string[]) => Promise<void>;
   unstake: (amount: string) => Promise<void>;
@@ -28,11 +25,11 @@ interface UsePolkadotReturn {
 }
 
 export function usePolkadot(): UsePolkadotReturn {
+  const { selectedAccount, selectAccount: selectWalletAccount } = useWalletStore();
   const [isConnected, setIsConnected] = useState(false);
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [accounts, setAccounts] = useState<WalletAccount[]>([]);
   const [chainInfo, setChainInfo] = useState<ChainInfo | null>(null);
-  const [selectedAccount, setSelectedAccount] = useState<WalletAccount | null>(null);
   const [error, setError] = useState<Error | null>(null);
 
   const connect = useCallback(async () => {
@@ -58,6 +55,10 @@ export function usePolkadot(): UsePolkadotReturn {
     }
   }, []);
 
+  const selectAccount = useCallback((account: WalletAccount) => {
+    selectWalletAccount(account);
+  }, [selectWalletAccount]);
+
   const connectWallet = useCallback(async () => {
     try {
       const walletAccounts = await polkadotApiService.initializeWallet();
@@ -68,19 +69,19 @@ export function usePolkadot(): UsePolkadotReturn {
       // Auto-select first account if available
       const firstAccount = walletAccounts[0];
       if (firstAccount && !selectedAccount) {
-        setSelectedAccount(firstAccount);
+        selectAccount(firstAccount);
       }
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
       setIsWalletConnected(false);
     }
-  }, [selectedAccount]);
-
-  const selectAccount = useCallback((account: WalletAccount) => {
-    setSelectedAccount(account);
-  }, []);
+  }, [selectedAccount, selectAccount]);
 
   const getBalance = useCallback(async (address: string): Promise<string> => {
+    if (!address) {
+      throw new Error('Address is required');
+    }
+
     try {
       return await polkadotApiService.getAccountBalance(address);
     } catch (err) {
@@ -89,12 +90,12 @@ export function usePolkadot(): UsePolkadotReturn {
     }
   }, []);
 
-  const getStakingInfo = useCallback(async (address: string): Promise<StakingInfo | null> => {
+  const getStakingInfo = useCallback(async (): Promise<StakingInfo | null> => {
     try {
-      return await polkadotApiService.getStakingInfo(address);
+      return await polkadotApiService.getStakingInfo();
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
-      throw err;
+      return null;
     }
   }, []);
 
@@ -113,15 +114,8 @@ export function usePolkadot(): UsePolkadotReturn {
     }
 
     try {
-      await polkadotApiService.stake(
-        selectedAccount.address,
-        amount,
-        validators,
-        (status: TransactionStatus) => {
-          // You can add transaction status handling here if needed
-          console.log('Staking transaction status:', status);
-        }
-      );
+      setError(null);
+      await polkadotApiService.stake(amount, validators);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
       throw err;
@@ -134,14 +128,8 @@ export function usePolkadot(): UsePolkadotReturn {
     }
 
     try {
-      await polkadotApiService.unstake(
-        selectedAccount.address,
-        amount,
-        (status: TransactionStatus) => {
-          // You can add transaction status handling here if needed
-          console.log('Unstaking transaction status:', status);
-        }
-      );
+      setError(null);
+      await polkadotApiService.unstake(amount);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
       throw err;
@@ -154,13 +142,8 @@ export function usePolkadot(): UsePolkadotReturn {
     }
 
     try {
-      await polkadotApiService.withdrawUnbonded(
-        selectedAccount.address,
-        (status: TransactionStatus) => {
-          // You can add transaction status handling here if needed
-          console.log('Withdraw unbonded transaction status:', status);
-        }
-      );
+      setError(null);
+      await polkadotApiService.withdrawUnbonded(selectedAccount, 0);
     } catch (err) {
       setError(err instanceof Error ? err : new Error(String(err)));
       throw err;
