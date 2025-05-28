@@ -1,30 +1,34 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
 import { WalletIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
-import { getWallets } from '@talismn/connect-wallets';
+import { getWallets, type Wallet } from '@talismn/connect-wallets';
 
 export function WalletConnect() {
-  const { selectedAccount, setSelectedAccount, accounts, loadAccounts } = useWalletStore();
+  const { selectedAccount, connect, disconnect } = useWalletStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showWalletList, setShowWalletList] = useState(false);
 
-  useEffect(() => {
-    if (!accounts.length) {
-      void handleConnect();
-    }
-  }, [accounts.length]);
-
-  const handleConnect = async () => {
+  const handleConnect = async (wallet: Wallet) => {
     try {
       setIsLoading(true);
       setError(null);
-      await loadAccounts();
+      
+      if (!wallet.installed) {
+        window.open(wallet.installUrl, '_blank');
+        return;
+      }
+
+      // Enable the wallet
+      await wallet.enable('Polkadot Dashboard');
+      
+      // Connect using the store
+      await connect();
       setShowWalletList(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to connect wallet');
@@ -34,7 +38,13 @@ export function WalletConnect() {
   };
 
   const handleDisconnect = () => {
-    setSelectedAccount(null);
+    disconnect();
+  };
+
+  const getDisplayName = (account: any) => {
+    if (account.name) return account.name;
+    if (account.source) return `${account.source} Account`;
+    return `${account.address.slice(0, 4)}...${account.address.slice(-4)}`;
   };
 
   if (error) {
@@ -44,7 +54,10 @@ export function WalletConnect() {
         <Button
           variant="outline"
           className="mt-2"
-          onClick={() => setError(null)}
+          onClick={() => {
+            setError(null);
+            setShowWalletList(true);
+          }}
         >
           Try Again
         </Button>
@@ -59,7 +72,7 @@ export function WalletConnect() {
           <Button variant="outline" className="flex items-center gap-2">
             <WalletIcon className="h-5 w-5" />
             <span className="truncate max-w-[150px]">
-              {(selectedAccount as any).meta?.name || selectedAccount.address}
+              {getDisplayName(selectedAccount)}
             </span>
             <ChevronDownIcon className="h-4 w-4" />
           </Button>
@@ -109,14 +122,8 @@ export function WalletConnect() {
                 key={wallet.title}
                 variant="outline"
                 className="w-full flex items-center gap-2 justify-start"
-                disabled={!wallet.installed}
-                onClick={() => {
-                  if (wallet.installed) {
-                    void handleConnect();
-                  } else {
-                    window.open(wallet.installUrl, '_blank');
-                  }
-                }}
+                disabled={isLoading}
+                onClick={() => void handleConnect(wallet)}
               >
                 {wallet.logo && (
                   <img src={wallet.logo.src} alt={wallet.title} className="w-6 h-6" />

@@ -1,4 +1,11 @@
 import { Project, ProjectCategory, ProjectStatus, SocialLinks, ProjectStats, CategoryInfo } from '@/types/ecosystem';
+import {
+  CurrencyDollarIcon,
+  PhotoIcon,
+  ServerStackIcon,
+  UserGroupIcon,
+  FingerPrintIcon
+} from '@heroicons/react/24/outline';
 
 export type { Project, ProjectCategory, ProjectStatus, SocialLinks, ProjectStats };
 
@@ -16,35 +23,35 @@ class EcosystemService {
       id: 'defi',
       name: 'DeFi',
       description: 'Decentralized Finance protocols and applications',
-      icon: 'CurrencyDollarIcon',
+      icon: CurrencyDollarIcon,
       count: 0
     },
     {
       id: 'nft',
       name: 'NFTs & Gaming',
       description: 'NFT marketplaces, games, and collectibles',
-      icon: 'PhotoIcon',
+      icon: PhotoIcon,
       count: 0
     },
     {
       id: 'infrastructure',
       name: 'Infrastructure',
       description: 'Core infrastructure and development tools',
-      icon: 'ServerStackIcon',
+      icon: ServerStackIcon,
       count: 0
     },
     {
       id: 'dao',
       name: 'DAOs & Governance',
       description: 'Decentralized organizations and governance tools',
-      icon: 'UserGroupIcon',
+      icon: UserGroupIcon,
       count: 0
     },
     {
       id: 'identity',
       name: 'Identity & Privacy',
       description: 'Identity management and privacy solutions',
-      icon: 'FingerPrintIcon',
+      icon: FingerPrintIcon,
       count: 0
     }
   ];

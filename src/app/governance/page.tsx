@@ -5,31 +5,28 @@ import * as React from 'react';
 import { useSession } from 'next-auth/react';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Card } from '@/components/ui/Card';
+import { Suspense } from 'react';
 
-const VotingHistory = dynamic(() => import('@/components/governance/VotingHistory').then(mod => ({ default: mod.VotingHistory })), {
-  ssr: false,
-  loading: () => (
-    <Card className="p-6">
-      <div className="space-y-4">
-        <div className="h-6 w-3/4 bg-gray-200 animate-pulse rounded"></div>
-        <div className="h-6 w-1/2 bg-gray-200 animate-pulse rounded"></div>
-      </div>
-    </Card>
-  )
-});
+// Dynamically import components that use browser APIs with ssr: false
+const ReferendumList = dynamic(
+  () => import('@/components/governance/ReferendumList').then(mod => ({ default: mod.ReferendumList })),
+  { ssr: false }
+);
 
-const OpenGovGuide = dynamic(() => import('@/components/governance/OpenGovGuide').then(mod => ({ default: mod.OpenGovGuide })), {
-  ssr: false
-});
+const Delegation = dynamic(
+  () => import('@/components/governance/Delegation').then(mod => ({ default: mod.Delegation })),
+  { ssr: false }
+);
 
-const VotingPowerVisualizer = dynamic(() => import('@/components/governance/VotingPowerVisualizer').then(mod => ({ default: mod.VotingPowerVisualizer })), {
-  ssr: false,
-  loading: () => (
-    <Card className="p-6">
-      <div className="h-32 bg-gray-200 animate-pulse rounded"></div>
-    </Card>
-  )
-});
+const OpenGovGuide = dynamic(
+  () => import('@/components/governance/OpenGovGuide').then(mod => ({ default: mod.OpenGovGuide })),
+  { ssr: false }
+);
+
+const PolkadotProvider = dynamic(
+  () => import('@/providers/PolkadotProvider').then(mod => ({ default: mod.PolkadotProvider })),
+  { ssr: false }
+);
 
 interface User {
   name?: string | null;
@@ -39,20 +36,25 @@ interface User {
   balance?: string;
 }
 
-export default function GovernancePage() {
+function GovernanceContent() {
   const { data: session } = useSession();
   const [showGuide, setShowGuide] = React.useState(false);
   const user = session?.user as User | undefined;
   const userAddress = user?.address || '';
-  const userBalance = user?.balance || '0';
 
+  // Show wallet connection prompt if no user address
   if (!userAddress) {
     return (
-      <Card className="p-6">
-        <p className="text-center text-muted-foreground">
-          Please connect your wallet to access governance features.
-        </p>
-      </Card>
+      <div className="container py-8">
+        <Card className="p-8 max-w-2xl mx-auto">
+          <div className="text-center">
+            <h2 className="text-2xl font-bold mb-4">Connect Your Wallet</h2>
+            <p className="text-gray-600 mb-6">
+              Please connect your wallet to access governance features and participate in on-chain democracy.
+            </p>
+          </div>
+        </Card>
+      </div>
     );
   }
 
@@ -70,27 +72,43 @@ export default function GovernancePage() {
 
       <OpenGovGuide isOpen={showGuide} onClose={() => setShowGuide(false)} />
 
-      <Tabs defaultValue="voting-power">
-        <TabsList>
-          <TabsTrigger value="voting-power">Voting Power</TabsTrigger>
-          <TabsTrigger value="voting-history">Voting History</TabsTrigger>
-          <TabsTrigger value="delegation">Delegation</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="voting-power" className="mt-6">
-          <VotingPowerVisualizer balance={userBalance} />
-        </TabsContent>
-
-        <TabsContent value="voting-history" className="mt-6">
-          <VotingHistory address={userAddress} />
-        </TabsContent>
-
-        <TabsContent value="delegation" className="mt-6">
-          <Card className="p-6">
-            <p>Delegation features coming soon...</p>
-          </Card>
-        </TabsContent>
-      </Tabs>
+      <div className="grid grid-cols-1 gap-6">
+        <Card className="p-6">
+          <h2 className="text-xl font-semibold mb-4">Governance Stats</h2>
+          <p className="text-gray-600">Loading governance statistics...</p>
+        </Card>
+        
+        <Tabs defaultValue="referendums" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="referendums">Referendums</TabsTrigger>
+            <TabsTrigger value="delegation">Delegation</TabsTrigger>
+          </TabsList>
+          
+          <TabsContent value="referendums">
+            <Card>
+              <Suspense fallback={<div>Loading...</div>}>
+                <ReferendumList />
+              </Suspense>
+            </Card>
+          </TabsContent>
+          
+          <TabsContent value="delegation">
+            <Card>
+              <Suspense fallback={<div>Loading...</div>}>
+                <Delegation />
+              </Suspense>
+            </Card>
+          </TabsContent>
+        </Tabs>
+      </div>
     </div>
+  );
+}
+
+export default function GovernancePage() {
+  return (
+    <PolkadotProvider>
+      <GovernanceContent />
+    </PolkadotProvider>
   );
 } 

@@ -1,67 +1,72 @@
 'use client';
 
 import { create } from 'zustand';
-import { InjectedAccount } from '@polkadot/extension-inject/types';
-import { getWallets, Wallet } from '@talismn/connect-wallets';
-import { web3Enable } from '@polkadot/extension-dapp';
+import { getWallets, type WalletAccount } from '@talismn/connect-wallets';
 
 interface WalletState {
-  selectedAccount: InjectedAccount | null;
-  accounts: InjectedAccount[];
-  wallets: Wallet[];
+  accounts: WalletAccount[];
+  selectedAccount: WalletAccount | null;
   isConnected: boolean;
-  setSelectedAccount: (account: InjectedAccount | null) => void;
-  loadAccounts: () => Promise<void>;
-}
-
-declare global {
-  interface Window {
-    injectedWeb3?: Record<string, unknown>;
-  }
+  error: string | null;
+  connect: () => Promise<void>;
+  disconnect: () => void;
+  setSelectedAccount: (account: WalletAccount | null) => void;
 }
 
 export const useWalletStore = create<WalletState>((set) => ({
-  selectedAccount: null,
   accounts: [],
-  wallets: [],
+  selectedAccount: null,
   isConnected: false,
-
-  setSelectedAccount: (account) => {
-    set({ selectedAccount: account });
-  },
-
-  loadAccounts: async () => {
+  error: null,
+  connect: async () => {
+    if (typeof window === 'undefined') return;
+    
     try {
-      // First enable web3
-      const extensions = await web3Enable('Polkadot Dashboard');
-      if (extensions.length === 0) {
-        throw new Error('No compatible wallet found. Please install Polkadot.js, Talisman, or Nova Wallet.');
+      const wallets = getWallets();
+      const installedWallets = wallets.filter(wallet => wallet.installed);
+      
+      if (installedWallets.length === 0) {
+        set({ error: 'Please install a supported wallet extension first' });
+        return;
       }
 
-      // Get available wallets
-      const wallets = getWallets();
-      const availableWallet = wallets.find((w) => w.installed);
-      
-      if (!availableWallet) {
-        throw new Error('No compatible wallet found. Please install Polkadot.js, Talisman, or Nova Wallet.');
+      // Try to connect to the first installed wallet
+      const wallet = installedWallets[0];
+      if (!wallet) {
+        set({ error: 'No wallet available' });
+        return;
       }
 
       // Enable the wallet first
-      await availableWallet.enable('Polkadot Dashboard');
-      
+      await wallet.enable('Polkadot Dashboard');
+
       // Then get accounts
-      const accounts = await availableWallet.getAccounts();
-      const selectedAccount = accounts.length > 0 ? accounts[0] : null;
+      const accounts = await wallet.getAccounts();
       
-      set({
-        accounts,
-        wallets,
-        isConnected: accounts.length > 0,
-        selectedAccount
-      } as Partial<WalletState>);
+      if (!accounts || accounts.length === 0) {
+        set({ error: 'No accounts found. Please create an account in your wallet extension' });
+        return;
+      }
+
+      set({ accounts, isConnected: true, error: null });
+
+      // If there's only one account, select it automatically
+      if (accounts.length === 1) {
+        set({ selectedAccount: accounts[0] ?? null });
+      }
     } catch (error) {
-      console.error('Failed to load accounts:', error);
-      throw error;
+      console.error('Wallet connection error:', error);
+      set({ 
+        error: error instanceof Error 
+          ? error.message 
+          : 'Failed to connect wallet. Please make sure a supported wallet extension is installed and enabled.'
+      });
     }
+  },
+  disconnect: () => {
+    set({ accounts: [], selectedAccount: null, isConnected: false, error: null });
+  },
+  setSelectedAccount: (account) => {
+    set({ selectedAccount: account });
   },
 })); 

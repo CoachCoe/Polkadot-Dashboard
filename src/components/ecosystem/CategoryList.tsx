@@ -33,17 +33,15 @@ export function CategoryList({ categories, selectedCategory, onSelect }: Categor
                   : 'bg-gray-50'
                 }`}
               >
-                <img
-                  src={category.icon}
-                  alt={category.name}
+                <category.icon 
                   className={`
-                    w-8 h-8 object-contain
-                    ${selectedCategory === category.id ? 'brightness-200' : 'group-hover:scale-110'}
+                    w-8 h-8
+                    ${selectedCategory === category.id 
+                      ? 'text-pink-500' 
+                      : 'text-gray-500'
+                    }
                     transition-all duration-200
                   `}
-                  onError={(e) => {
-                    (e.target as HTMLImageElement).src = '/images/default-category.svg';
-                  }}
                 />
               </div>
             )}
@@ -57,7 +55,7 @@ export function CategoryList({ categories, selectedCategory, onSelect }: Categor
             </span>
             <span className={`
               text-xs mt-1
-              ${selectedCategory === category.id ? 'text-pink-100' : 'text-gray-400'}
+              ${selectedCategory === category.id ? 'text-pink-500' : 'text-gray-400'}
             `}>
               {category.count} projects
             </span>

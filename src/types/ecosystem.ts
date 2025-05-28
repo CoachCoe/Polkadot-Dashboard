@@ -1,3 +1,5 @@
+import { ForwardRefExoticComponent, SVGProps, RefAttributes } from 'react';
+
 export type ProjectCategory =
   | 'defi'
   | 'nft'
@@ -100,10 +102,12 @@ export interface ProjectSortOptions {
   direction: 'asc' | 'desc';
 }
 
+export type CategoryIcon = string | ForwardRefExoticComponent<Omit<SVGProps<SVGSVGElement>, "ref"> & { title?: string; titleId?: string; } & RefAttributes<SVGSVGElement>>;
+
 export interface CategoryInfo {
   id: string;
   name: string;
-  icon: string;
+  icon: CategoryIcon;
   count: number;
   description: string;
 } 

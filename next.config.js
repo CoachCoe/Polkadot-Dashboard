@@ -7,6 +7,7 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['@polkadot/api', '@polkadot/extension-dapp'],
   },
+  output: 'standalone',
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
@@ -23,11 +24,6 @@ const nextConfig = {
         assert: require.resolve('assert/'),
         os: require.resolve('os-browserify/browser'),
         process: require.resolve('process/browser'),
-        '@polkadot/wasm-crypto': false,
-        '@polkadot/wasm-crypto-wasm': false,
-        '@polkadot/wasm-crypto-asmjs': false,
-        '@polkadot/wasm-bridge': false,
-        '@polkadot/wasm-util': false,
       };
 
       config.plugins.push(
@@ -43,6 +39,19 @@ const nextConfig = {
       ...config.experiments,
       asyncWebAssembly: true,
       layers: true,
+      syncWebAssembly: true,
+    };
+
+    // Add WASM support
+    config.module = {
+      ...config.module,
+      rules: [
+        ...config.module.rules,
+        {
+          test: /\.wasm$/,
+          type: 'webassembly/async',
+        }
+      ]
     };
 
     return config;
@@ -57,9 +66,11 @@ const nextConfig = {
       },
     ],
   },
-  basePath: process.env.NODE_ENV === 'production' ? '/Polkadot-Dashboard' : '',
-  assetPrefix: process.env.NODE_ENV === 'production' ? '/Polkadot-Dashboard' : '',
-  output: 'export',
+  // Remove basePath and assetPrefix for local development
+  ...(process.env.NODE_ENV === 'production' ? {
+    basePath: '/Polkadot-Dashboard',
+    assetPrefix: '/Polkadot-Dashboard',
+  } : {}),
 }
 
 module.exports = nextConfig 

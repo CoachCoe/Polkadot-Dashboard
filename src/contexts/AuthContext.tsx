@@ -10,23 +10,30 @@ interface AuthContextType {
   logout: () => void;
 }
 
-const AuthContext = createContext<AuthContextType | null>(null);
+const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { selectedAccount, loadAccounts, setSelectedAccount } = useWalletStore();
+  const { selectedAccount, connect, disconnect } = useWalletStore();
   const [error, setError] = useState<Error | null>(null);
 
   const login = async () => {
     try {
       setError(null);
-      await loadAccounts();
+      await connect();
     } catch (err) {
       setError(err instanceof Error ? err : new Error('Failed to authenticate'));
+      throw err;
     }
   };
 
   const logout = () => {
-    setSelectedAccount(null);
+    try {
+      disconnect();
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err : new Error('Failed to logout'));
+      throw err;
+    }
   };
 
   return (
@@ -45,7 +52,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) {
+  if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
