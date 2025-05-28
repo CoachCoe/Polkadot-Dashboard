@@ -1,6 +1,6 @@
 'use client';
 
-import { Project, ProjectFilter, ProjectSortOptions, ProjectCategory } from '@/types/ecosystem';
+import { Project, ProjectFilter, ProjectSortOptions, ProjectCategory, CategoryInfo } from '@/types/ecosystem';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 class EcosystemService {
@@ -129,10 +129,6 @@ class EcosystemService {
         return false;
       }
 
-      if (filter.tags?.length && !project.tags.some(tag => filter.tags?.includes(tag))) {
-        return false;
-      }
-
       if (filter.searchTerm) {
         const searchTerm = filter.searchTerm.toLowerCase();
         const matchesSearch = 
@@ -181,6 +177,114 @@ class EcosystemService {
           return 0;
       }
     });
+  }
+
+  async getCategories(): Promise<CategoryInfo[]> {
+    try {
+      await this.initialize();
+      
+      const categoryMap = new Map<ProjectCategory, number>();
+      this.projects.forEach(project => {
+        const count = categoryMap.get(project.category) || 0;
+        categoryMap.set(project.category, count + 1);
+      });
+
+      return [
+        {
+          id: 'defi',
+          name: 'DeFi',
+          description: 'Decentralized Finance applications and protocols',
+          icon: '/images/categories/defi.svg',
+          count: categoryMap.get('defi') || 0
+        },
+        {
+          id: 'nft',
+          name: 'NFTs',
+          description: 'Non-Fungible Token platforms and marketplaces',
+          icon: '/images/categories/nft.svg',
+          count: categoryMap.get('nft') || 0
+        },
+        {
+          id: 'infrastructure',
+          name: 'Infrastructure',
+          description: 'Core blockchain infrastructure and protocols',
+          icon: '/images/categories/infrastructure.svg',
+          count: categoryMap.get('infrastructure') || 0
+        },
+        {
+          id: 'developer-tools',
+          name: 'Developer Tools',
+          description: 'Tools and services for blockchain developers',
+          icon: '/images/categories/developer-tools.svg',
+          count: categoryMap.get('developer-tools') || 0
+        },
+        {
+          id: 'gaming',
+          name: 'Gaming',
+          description: 'Blockchain gaming and GameFi projects',
+          icon: '/images/categories/gaming.svg',
+          count: categoryMap.get('gaming') || 0
+        },
+        {
+          id: 'social',
+          name: 'Social',
+          description: 'Social networks and communication platforms',
+          icon: '/images/categories/social.svg',
+          count: categoryMap.get('social') || 0
+        },
+        {
+          id: 'dao',
+          name: 'DAO',
+          description: 'Decentralized Autonomous Organizations',
+          icon: '/images/categories/dao.svg',
+          count: categoryMap.get('dao') || 0
+        },
+        {
+          id: 'privacy',
+          name: 'Privacy',
+          description: 'Privacy-focused solutions and protocols',
+          icon: '/images/categories/privacy.svg',
+          count: categoryMap.get('privacy') || 0
+        },
+        {
+          id: 'identity',
+          name: 'Identity',
+          description: 'Identity and authentication solutions',
+          icon: '/images/categories/identity.svg',
+          count: categoryMap.get('identity') || 0
+        },
+        {
+          id: 'other',
+          name: 'Other',
+          description: 'Other blockchain projects and services',
+          icon: '/images/categories/other.svg',
+          count: categoryMap.get('other') || 0
+        }
+      ];
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to fetch categories',
+        ErrorCodes.DATA.CATEGORY_ERROR,
+        'Unable to load categories. Please try again later.'
+      );
+    }
+  }
+
+  async getAllTags(): Promise<string[]> {
+    try {
+      await this.initialize();
+      const tags = new Set<string>();
+      this.projects.forEach(project => {
+        project.tags.forEach(tag => tags.add(tag));
+      });
+      return Array.from(tags);
+    } catch (error) {
+      throw new PolkadotHubError(
+        'Failed to fetch tags',
+        ErrorCodes.DATA.PROJECT_FILTER_ERROR,
+        'Unable to load tags. Please try again later.'
+      );
+    }
   }
 }
 

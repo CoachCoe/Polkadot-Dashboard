@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Popover } from '@/components/ui/Popover';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
 
 interface Topic {
   id: string;
@@ -148,23 +148,22 @@ export function OpenGovEducation() {
           <Button variant="outline" size="sm">
             Visit Wiki
           </Button>
-          <Popover
-            content={
-              <div className="p-4">
-                <h4 className="font-medium mb-2">Quick Tips</h4>
-                <ul className="list-disc list-inside space-y-2 text-sm">
-                  <li>Start with beginner topics</li>
-                  <li>Practice with small amounts first</li>
-                  <li>Join community discussions</li>
-                  <li>Follow proposal discussions</li>
-                  <li>Ask questions in Discord</li>
-                </ul>
-              </div>
-            }
-          >
-            <Button variant="outline" size="sm">
-              Quick Tips
-            </Button>
+          <Popover>
+            <PopoverTrigger asChild>
+              <Button variant="outline" size="sm">
+                Quick Tips
+              </Button>
+            </PopoverTrigger>
+            <PopoverContent className="w-64">
+              <h4 className="font-medium mb-2">Quick Tips</h4>
+              <ul className="list-disc list-inside space-y-2 text-sm">
+                <li>Start with beginner topics</li>
+                <li>Practice with small amounts first</li>
+                <li>Join community discussions</li>
+                <li>Follow proposal discussions</li>
+                <li>Ask questions in Discord</li>
+              </ul>
+            </PopoverContent>
           </Popover>
         </div>
       </Card>

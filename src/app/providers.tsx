@@ -3,6 +3,7 @@
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider } from '@/contexts/AuthContext';
+import { PolkadotProvider } from '@/providers/PolkadotProvider';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -17,7 +18,9 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <AuthProvider>
       <QueryClientProvider client={queryClient}>
-        {children}
+        <PolkadotProvider>
+          {children}
+        </PolkadotProvider>
       </QueryClientProvider>
     </AuthProvider>
   );

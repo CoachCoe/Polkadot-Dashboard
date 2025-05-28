@@ -2,20 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ecosystemService } from '@/services/ecosystem';
-import { Project, ProjectCategory } from '@/types/ecosystem';
+import { Project, CategoryInfo } from '@/types/ecosystem';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 
 interface EcosystemFilters {
   category?: string | undefined;
   search?: string;
   tags?: string[];
-}
-
-interface CategoryInfo {
-  id: ProjectCategory;
-  name: string;
-  description: string;
-  icon: string;
 }
 
 export function useEcosystem() {

@@ -9,13 +9,23 @@ interface ProjectFiltersProps {
   currentFilter: ProjectFilter;
   onChange: (filter: ProjectFilter) => void;
   isLoading?: boolean;
+  hideSearch?: boolean;
 }
 
-export function ProjectFilters({ currentFilter, onChange, isLoading = false }: ProjectFiltersProps) {
+const tvlRangeOptions = [
+  { value: '0-1m', label: '$0 - $1M' },
+  { value: '1m-10m', label: '$1M - $10M' },
+  { value: '10m-100m', label: '$10M - $100M' },
+  { value: '100m+', label: '$100M+' }
+];
+
+export function ProjectFilters({ currentFilter, onChange, isLoading = false, hideSearch = false }: ProjectFiltersProps) {
   const [searchTerm, setSearchTerm] = useState(currentFilter.searchTerm || '');
   const [selectedCategories, setSelectedCategories] = useState<ProjectCategory[]>(currentFilter.categories || []);
   const [selectedStatuses, setSelectedStatuses] = useState<ProjectStatus[]>(currentFilter.status || []);
   const [selectedChains, setSelectedChains] = useState<string[]>(currentFilter.chains || []);
+  const [selectedTvlRanges, setSelectedTvlRanges] = useState<string[]>(currentFilter.tvlRanges || []);
+  const [sortOption, setSortOption] = useState(currentFilter.sortBy || 'tvl');
   const [isVerified, setIsVerified] = useState(currentFilter.isVerified || false);
   const [isParachain, setIsParachain] = useState(currentFilter.isParachain || false);
 
@@ -92,6 +102,23 @@ export function ProjectFilters({ currentFilter, onChange, isLoading = false }: P
     });
   };
 
+  const handleTvlRangeChange = (ranges: string[]) => {
+    setSelectedTvlRanges(ranges);
+    onChange({
+      ...currentFilter,
+      tvlRanges: ranges
+    });
+  };
+
+  const handleSortChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const value = e.target.value;
+    setSortOption(value);
+    onChange({
+      ...currentFilter,
+      sortBy: value
+    });
+  };
+
   const categoryOptions: { value: ProjectCategory; label: string }[] = [
     { value: 'defi', label: 'DeFi' },
     { value: 'nft', label: 'NFTs' },
@@ -123,55 +150,91 @@ export function ProjectFilters({ currentFilter, onChange, isLoading = false }: P
   ];
 
   return (
-    <div className="space-y-4">
-      <div className="relative">
-        <input
-          type="text"
-          placeholder="Search projects..."
-          value={searchTerm}
-          onChange={handleSearchChange}
-          className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500"
-          disabled={isLoading}
-        />
-        <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+    <div className="space-y-4 w-full">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Categories</label>
+            <MultiSelect
+              value={selectedCategories}
+              onValueChange={handleCategoryChange}
+              items={categoryOptions}
+              placeholder="Select categories"
+              disabled={isLoading}
+              className="bg-white border-gray-200 shadow-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+            <MultiSelect
+              value={selectedStatuses}
+              onValueChange={handleStatusChange}
+              items={statusOptions}
+              placeholder="Select status"
+              disabled={isLoading}
+              className="bg-white border-gray-200 shadow-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Chains</label>
+            <MultiSelect
+              value={selectedChains}
+              onValueChange={handleChainChange}
+              items={chainOptions}
+              placeholder="Select chains"
+              disabled={isLoading}
+              className="bg-white border-gray-200 shadow-sm"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">TVL Range</label>
+            <MultiSelect
+              value={selectedTvlRanges}
+              onValueChange={handleTvlRangeChange}
+              items={tvlRangeOptions}
+              placeholder="Select TVL range"
+              disabled={isLoading}
+              className="bg-white border-gray-200 shadow-sm"
+            />
+          </div>
+        </div>
+
+        <div className="flex items-end">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">Sort By</label>
+            <select
+              value={sortOption}
+              onChange={handleSortChange}
+              className="h-10 px-3 py-2 bg-white border border-gray-200 rounded-md shadow-sm focus:outline-none focus:ring-2 focus:ring-pink-500 focus:border-pink-500"
+              disabled={isLoading}
+            >
+              <option value="tvl">TVL (High to Low)</option>
+              <option value="name">Name (A-Z)</option>
+              <option value="newest">Newest First</option>
+              <option value="oldest">Oldest First</option>
+            </select>
+          </div>
+        </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <div>
-          <label className="block text-sm font-medium mb-2">Categories</label>
-          <MultiSelect
-            value={selectedCategories}
-            onValueChange={handleCategoryChange}
-            items={categoryOptions}
-            placeholder="Select categories"
+      {!hideSearch && (
+        <div className="relative mt-4">
+          <input
+            type="text"
+            placeholder="Search projects..."
+            value={searchTerm}
+            onChange={handleSearchChange}
+            className="w-full pl-10 pr-4 py-2 border rounded-lg focus:outline-none focus:ring-2 focus:ring-pink-500 bg-white shadow-sm"
             disabled={isLoading}
           />
+          <MagnifyingGlassIcon className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
         </div>
+      )}
 
-        <div>
-          <label className="block text-sm font-medium mb-2">Status</label>
-          <MultiSelect
-            value={selectedStatuses}
-            onValueChange={handleStatusChange}
-            items={statusOptions}
-            placeholder="Select status"
-            disabled={isLoading}
-          />
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium mb-2">Chains</label>
-          <MultiSelect
-            value={selectedChains}
-            onValueChange={handleChainChange}
-            items={chainOptions}
-            placeholder="Select chains"
-            disabled={isLoading}
-          />
-        </div>
-      </div>
-
-      <div className="flex items-center space-x-6">
+      <div className="flex items-center space-x-6 pt-2">
         <div className="flex items-center space-x-2">
           <Checkbox
             id="verified"
@@ -181,7 +244,7 @@ export function ProjectFilters({ currentFilter, onChange, isLoading = false }: P
           />
           <label
             htmlFor="verified"
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            className="text-sm font-medium text-gray-700 leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
           >
             Verified Projects
           </label>
@@ -196,9 +259,9 @@ export function ProjectFilters({ currentFilter, onChange, isLoading = false }: P
           />
           <label
             htmlFor="parachain"
-            className="text-sm font-medium leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+            className="text-sm font-medium text-gray-700 leading-none peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
           >
-            Parachains Only
+            Parachain Projects
           </label>
         </div>
       </div>

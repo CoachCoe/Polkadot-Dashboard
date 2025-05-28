@@ -1,4 +1,4 @@
-import { Project, ProjectCategory, ProjectStatus, SocialLinks, ProjectStats } from '@/types/ecosystem';
+import { Project, ProjectCategory, ProjectStatus, SocialLinks, ProjectStats, CategoryInfo } from '@/types/ecosystem';
 
 export type { Project, ProjectCategory, ProjectStatus, SocialLinks, ProjectStats };
 
@@ -11,36 +11,41 @@ interface EcosystemFilters {
 class EcosystemService {
   private static instance: EcosystemService;
 
-  private categories: { id: ProjectCategory; name: string; description: string; icon: string }[] = [
+  private categories: CategoryInfo[] = [
     {
       id: 'defi',
       name: 'DeFi',
       description: 'Decentralized Finance protocols and applications',
-      icon: 'CurrencyDollarIcon'
+      icon: 'CurrencyDollarIcon',
+      count: 0
     },
     {
       id: 'nft',
       name: 'NFTs & Gaming',
       description: 'NFT marketplaces, games, and collectibles',
-      icon: 'PhotoIcon'
+      icon: 'PhotoIcon',
+      count: 0
     },
     {
       id: 'infrastructure',
       name: 'Infrastructure',
       description: 'Core infrastructure and development tools',
-      icon: 'ServerStackIcon'
+      icon: 'ServerStackIcon',
+      count: 0
     },
     {
       id: 'dao',
       name: 'DAOs & Governance',
       description: 'Decentralized organizations and governance tools',
-      icon: 'UserGroupIcon'
+      icon: 'UserGroupIcon',
+      count: 0
     },
     {
       id: 'identity',
       name: 'Identity & Privacy',
       description: 'Identity management and privacy solutions',
-      icon: 'FingerPrintIcon'
+      icon: 'FingerPrintIcon',
+      count: 0
     }
   ];
 
@@ -140,7 +145,7 @@ class EcosystemService {
     return EcosystemService.instance;
   }
 
-  getCategories(): { id: ProjectCategory; name: string; description: string; icon: string }[] {
+  getCategories(): CategoryInfo[] {
     return this.categories;
   }
 

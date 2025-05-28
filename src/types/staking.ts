@@ -24,11 +24,11 @@ export interface ValidatorInfo {
 
 export interface StakingInfo {
   totalStaked: string;
+  activeValidators: number;
+  minimumStake: string;
   activeEra: number;
   rewardRate: string;
-  minNomination: string;
-  maxNominators: number;
-  unbondingDuration: number;
+  stakingEnabled: boolean;
 }
 
 export interface NominatorInfo {
@@ -55,4 +55,12 @@ export interface TransactionStatus {
   isInBlock: boolean;
   isFinalized: boolean;
   error?: string;
+}
+
+export interface StakingQueries {
+  validators: any;  // Using any temporarily to fix type issues
+  validatorPrefs: any;
+  erasStakers: any;
+  activeEra: any;
+  erasStakersPayout: any;
 } 

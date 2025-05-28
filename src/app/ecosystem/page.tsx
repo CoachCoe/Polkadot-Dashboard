@@ -4,20 +4,44 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { DashboardLayout } from '@/components/layouts/DashboardLayout';
 import { CategoryList } from '@/components/ecosystem/CategoryList';
 import { ProjectCard } from '@/components/ecosystem/ProjectCard';
-import { ProjectFilters } from '@/components/ecosystem/ProjectFilters';
-import { ProjectSort } from '@/components/ecosystem/ProjectSort';
 import { Input } from '@/components/ui/Input';
 import { useEcosystem } from '@/hooks/useEcosystem';
 import { projectStatsService } from '@/services/projectStats';
 import { ErrorDisplay } from '@/components/common/ErrorDisplay';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
-import type { Project, ProjectFilter, ProjectSortOptions } from '@/types/ecosystem';
+import type { Project, ProjectFilter, ProjectStatus } from '@/types/ecosystem';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ecosystemService } from '@/services/ecosystem/ecosystemService';
 import { useToast } from '@/hooks/useToast';
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { MultiSelect } from '@/components/ui/MultiSelect';
 
 // DetailedStats is just an alias for Project since we're already extending Project with stats
 type DetailedStats = Project;
+
+const statusOptions = [
+  { value: 'live' as ProjectStatus, label: 'Live' },
+  { value: 'beta' as ProjectStatus, label: 'Beta' },
+  { value: 'testnet' as ProjectStatus, label: 'Testnet' },
+  { value: 'development' as ProjectStatus, label: 'Development' },
+  { value: 'concept' as ProjectStatus, label: 'Concept' }
+];
+
+const chainOptions = [
+  { value: 'polkadot', label: 'Polkadot' },
+  { value: 'kusama', label: 'Kusama' },
+  { value: 'asset-hub', label: 'Asset Hub' },
+  { value: 'acala', label: 'Acala' },
+  { value: 'astar', label: 'Astar' },
+  { value: 'moonbeam', label: 'Moonbeam' }
+];
+
+const tvlRangeOptions = [
+  { value: '0-1m', label: '$0 - $1M' },
+  { value: '1m-10m', label: '$1M - $10M' },
+  { value: '10m-100m', label: '$10M - $100M' },
+  { value: '100m+', label: '$100M+' }
+];
 
 export default function EcosystemPage() {
   const { showToast } = useToast();
@@ -32,10 +56,6 @@ export default function EcosystemPage() {
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filter, setFilter] = useState<ProjectFilter>({});
-  const [sort, setSort] = useState<ProjectSortOptions>({
-    field: 'name',
-    direction: 'asc'
-  });
   const [selectedCategory, setSelectedCategory] = useState<string>();
   const [projectStats, setProjectStats] = useState<DetailedStats[]>([]);
   const [isLoadingStats, setIsLoadingStats] = useState(true);
@@ -115,10 +135,6 @@ export default function EcosystemPage() {
     setFilter(prev => ({ ...prev, ...newFilter }));
   };
 
-  const handleSortChange = (newSort: ProjectSortOptions) => {
-    setSort(prev => ({ ...prev, ...newSort }));
-  };
-
   const handleRefresh = useCallback(() => {
     refresh();
     fetchProjectStats();
@@ -129,15 +145,12 @@ export default function EcosystemPage() {
 
   useEffect(() => {
     loadProjects();
-  }, [filter, sort]);
+  }, [filter]);
 
   const loadProjects = async () => {
     try {
       setLoading(true);
-      const data = await ecosystemService.getProjects(
-        { ...filter, searchTerm },
-        sort
-      );
+      const data = await ecosystemService.getProjects({ ...filter, searchTerm });
       setProjectStats(data.map(project => ({
         ...project,
         stats: project.stats || {},
@@ -193,69 +206,70 @@ export default function EcosystemPage() {
           </button>
         </div>
 
+        <div className="flex flex-wrap items-center gap-4">
+          <div className="flex-1 flex items-center gap-4 min-w-0">
+            <div className="w-40">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+              <MultiSelect
+                value={filter.status || []}
+                onValueChange={(status) => handleFilterChange({ ...filter, status })}
+                items={statusOptions}
+                placeholder="Select status"
+                disabled={loading}
+                className="bg-white border-gray-200 shadow-sm"
+              />
+            </div>
+
+            <div className="w-40">
+              <label className="block text-sm font-medium text-gray-700 mb-1">Chain</label>
+              <MultiSelect
+                value={filter.chains || []}
+                onValueChange={(chains) => handleFilterChange({ ...filter, chains })}
+                items={chainOptions}
+                placeholder="Select chain"
+                disabled={loading}
+                className="bg-white border-gray-200 shadow-sm"
+              />
+            </div>
+
+            <div className="w-40">
+              <label className="block text-sm font-medium text-gray-700 mb-1">TVL Range</label>
+              <MultiSelect
+                value={filter.tvlRanges || []}
+                onValueChange={(tvlRanges) => handleFilterChange({ ...filter, tvlRanges })}
+                items={tvlRangeOptions}
+                placeholder="Select range"
+                disabled={loading}
+                className="bg-white border-gray-200 shadow-sm"
+              />
+            </div>
+          </div>
+
+          <div className="w-64">
+            <Input
+              type="text"
+              placeholder="Search projects..."
+              value={searchTerm}
+              onChange={(e) => handleSearch(e.target.value)}
+              className="w-full"
+              leftIcon={<MagnifyingGlassIcon className="h-5 w-5 text-gray-400" />}
+            />
+          </div>
+        </div>
+
         <section>
-          <h2 className="text-2xl font-semibold mb-4">Categories</h2>
           <CategoryList
             categories={categories}
             selectedCategory={selectedCategory}
-            onSelectCategory={handleCategorySelect}
-            isLoading={isLoadingProjects}
+            onSelect={handleCategorySelect}
           />
         </section>
 
         <section>
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-2xl font-semibold">Projects</h2>
-            <p className="text-sm text-gray-500">
-              {projects.length} projects found
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-[300px_1fr] gap-6">
-            <aside className="space-y-6">
-              <div>
-                <Input
-                  type="search"
-                  placeholder="Search projects..."
-                  value={searchTerm}
-                  onChange={(e) => handleSearch(e.target.value)}
-                />
-              </div>
-
-              <ProjectFilters
-                currentFilter={filter}
-                onChange={handleFilterChange}
-              />
-            </aside>
-
-            <main className="space-y-6">
-              <div className="flex justify-between items-center">
-                <p className="text-gray-600">
-                  {projects.length} projects found
-                </p>
-                <ProjectSort
-                  currentSort={sort}
-                  onChange={handleSortChange}
-                />
-              </div>
-
-              {loading ? (
-                <div className="text-center py-8">Loading projects...</div>
-              ) : projects.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                  {projectStats.map((project) => (
-                    <ProjectCard
-                      key={project.id}
-                      project={project}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  No projects found matching your criteria
-                </div>
-              )}
-            </main>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {projectStats.map((project) => (
+              <ProjectCard key={project.id} project={project} />
+            ))}
           </div>
         </section>
       </div>

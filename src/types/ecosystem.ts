@@ -85,11 +85,12 @@ export interface Project {
 }
 
 export interface ProjectFilter {
+  searchTerm?: string;
   categories?: ProjectCategory[];
   status?: ProjectStatus[];
   chains?: string[];
-  tags?: string[];
-  searchTerm?: string;
+  tvlRanges?: string[];
+  sortBy?: string;
   isVerified?: boolean;
   isParachain?: boolean;
 }
@@ -97,4 +98,12 @@ export interface ProjectFilter {
 export interface ProjectSortOptions {
   field: 'name' | 'tvl' | 'dailyActiveUsers' | 'launchDate' | 'marketCap';
   direction: 'asc' | 'desc';
+}
+
+export interface CategoryInfo {
+  id: string;
+  name: string;
+  icon: string;
+  count: number;
+  description: string;
 } 

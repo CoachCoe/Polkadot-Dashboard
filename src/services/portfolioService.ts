@@ -323,7 +323,7 @@ class PortfolioService {
           balance: assetHubBalance.total,
           value: '0', // TODO: Implement price fetching
           usdValue: '0',
-          logo: '/images/chains/asset-hub.png',
+          logo: '/images/chains/asset-hub.svg',
           locked: assetHubBalance.locked?.total,
           explorerUrl: `https://assethub.subscan.io/account/${address}`
         },
@@ -333,7 +333,7 @@ class PortfolioService {
           balance: acalaBalance.total,
           value: '0',
           usdValue: '0',
-          logo: '/images/chains/acala.png',
+          logo: '/images/chains/acala.svg',
           locked: acalaBalance.locked?.total,
           explorerUrl: `https://acala.subscan.io/account/${address}`
         },
@@ -343,7 +343,7 @@ class PortfolioService {
           balance: moonbeamBalance.total,
           value: '0',
           usdValue: '0',
-          logo: '/images/chains/moonbeam.png',
+          logo: '/images/chains/moonbeam.svg',
           locked: moonbeamBalance.locked?.total,
           explorerUrl: `https://moonbeam.subscan.io/account/${address}`
         },
@@ -353,7 +353,7 @@ class PortfolioService {
           balance: astarBalance.total,
           value: '0',
           usdValue: '0',
-          logo: '/images/chains/astar.png',
+          logo: '/images/chains/astar.svg',
           locked: astarBalance.locked?.total,
           explorerUrl: `https://astar.subscan.io/account/${address}`
         }

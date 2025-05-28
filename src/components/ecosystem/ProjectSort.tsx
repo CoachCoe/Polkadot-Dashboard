@@ -6,6 +6,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 interface ProjectSortProps {
   currentSort: ProjectSortOptions;
   onChange: (sort: ProjectSortOptions) => void;
+  isLoading?: boolean;
 }
 
 type SortField = ProjectSortOptions['field'];
@@ -24,12 +25,13 @@ const directionOptions: Array<{ value: SortDirection; label: string }> = [
   { value: 'desc', label: 'Descending' }
 ];
 
-export function ProjectSort({ currentSort, onChange }: ProjectSortProps) {
+export function ProjectSort({ currentSort, onChange, isLoading = false }: ProjectSortProps) {
   return (
     <div className="flex gap-2">
       <Select
         value={currentSort.field}
         onValueChange={(value) => onChange({ ...currentSort, field: value as SortField })}
+        disabled={isLoading}
       >
         <SelectTrigger>
           <SelectValue placeholder="Sort by" />
@@ -46,6 +48,7 @@ export function ProjectSort({ currentSort, onChange }: ProjectSortProps) {
       <Select
         value={currentSort.direction}
         onValueChange={(value) => onChange({ ...currentSort, direction: value as SortDirection })}
+        disabled={isLoading}
       >
         <SelectTrigger>
           <SelectValue placeholder="Direction" />

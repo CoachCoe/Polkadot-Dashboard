@@ -4,7 +4,7 @@ import polkadotApiService from '@/services/polkadotApiService';
 import type { RewardHistory } from '@/types/staking';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { formatBalance } from '@polkadot/util';
+import { formatBalance, BN } from '@polkadot/util';
 import { ArrowPathIcon, ChartBarIcon } from '@heroicons/react/24/outline';
 
 export function StakingAnalytics() {
@@ -33,12 +33,14 @@ export function StakingAnalytics() {
       // Get last 30 eras of rewards
       const startEra = Math.max(1, currentEra - 30);
       const rewards = await polkadotApiService.getHistoricalRewards(
-        selectedAccount.address,
         startEra,
         currentEra
       );
 
-      setRewardHistory(rewards);
+      setRewardHistory(rewards.map(r => ({
+        era: r.era,
+        amount: r.reward
+      })));
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load reward history');
     } finally {
@@ -49,19 +51,69 @@ export function StakingAnalytics() {
   const calculateStats = () => {
     if (rewardHistory.length === 0) return null;
 
-    const nonZeroRewards = rewardHistory.filter(r => Number(r.amount) > 0);
-    const totalRewards = nonZeroRewards.reduce((sum, r) => sum + Number(r.amount), 0);
-    const averageReward = totalRewards / nonZeroRewards.length;
-    const maxReward = Math.max(...nonZeroRewards.map(r => Number(r.amount)));
-    const minReward = Math.min(...nonZeroRewards.map(r => Number(r.amount)));
+    const nonZeroRewards = rewardHistory.filter(r => r.amount !== '0');
+    
+    if (nonZeroRewards.length === 0) {
+      return {
+        total: '0',
+        average: '0',
+        max: '0',
+        min: '0',
+        rewardCount: 0
+      };
+    }
 
-    return {
-      total: totalRewards.toString(),
-      average: averageReward.toString(),
-      max: maxReward.toString(),
-      min: minReward.toString(),
-      rewardCount: nonZeroRewards.length
-    };
+    try {
+      // Convert all rewards to BN, filtering out any invalid values
+      const rewardBNs = nonZeroRewards
+        .map(r => {
+          try {
+            return new BN(r.amount);
+          } catch {
+            return null;
+          }
+        })
+        .filter((bn): bn is BN => bn !== null);
+
+      if (rewardBNs.length === 0) {
+        throw new Error('No valid rewards found');
+      }
+
+      const totalRewards = new BN(0);
+      const firstReward = rewardBNs[0];
+      
+      if (!firstReward) {
+        throw new Error('No valid rewards found');
+      }
+
+      let maxReward = firstReward;
+      let minReward = firstReward;
+
+      for (const reward of rewardBNs) {
+        totalRewards.iadd(reward);
+        if (maxReward.lt(reward)) maxReward = reward;
+        if (minReward.gt(reward)) minReward = reward;
+      }
+
+      const averageReward = totalRewards.div(new BN(rewardBNs.length));
+
+      return {
+        total: totalRewards.toString(),
+        average: averageReward.toString(),
+        max: maxReward.toString(),
+        min: minReward.toString(),
+        rewardCount: rewardBNs.length
+      };
+    } catch (error) {
+      console.error('Error calculating stats:', error);
+      return {
+        total: '0',
+        average: '0',
+        max: '0',
+        min: '0',
+        rewardCount: 0
+      };
+    }
   };
 
   const stats = calculateStats();

@@ -1,41 +1,38 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Button } from '@/components/ui/Button';
-import { Popover } from '@/components/ui/Popover';
 import data from '@emoji-mart/data';
 import Picker from '@emoji-mart/react';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
+import { Button } from '@/components/ui/Button';
 
-interface Props {
-  onSelect: (emoji: string) => void;
+interface EmojiPickerProps {
+  onEmojiSelect: (emoji: any) => void;
 }
 
-export function EmojiPicker({ onSelect }: Props) {
+export function EmojiPicker({ onEmojiSelect }: EmojiPickerProps) {
   const [isOpen, setIsOpen] = useState(false);
 
-  const handleSelect = (emoji: { native: string }) => {
-    onSelect(emoji.native);
+  const handleEmojiSelect = (emoji: any) => {
+    onEmojiSelect(emoji);
     setIsOpen(false);
   };
 
   return (
-    <Popover
-      open={isOpen}
-      onOpenChange={setIsOpen}
-      content={
-        <div className="p-2">
-          <Picker
-            data={data}
-            onEmojiSelect={handleSelect}
-            theme="light"
-            set="native"
-          />
-        </div>
-      }
-    >
-      <Button variant="ghost" size="sm">
-        😀 Add Reaction
-      </Button>
+    <Popover open={isOpen} onOpenChange={setIsOpen}>
+      <PopoverTrigger asChild>
+        <Button variant="outline" size="icon">
+          <span className="text-lg">😊</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent className="p-0 w-auto border-none bg-transparent shadow-none">
+        <Picker
+          data={data}
+          onEmojiSelect={handleEmojiSelect}
+          theme="light"
+          previewPosition="none"
+        />
+      </PopoverContent>
     </Popover>
   );
 } 

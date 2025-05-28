@@ -14,22 +14,27 @@ interface ProjectCardProps {
 export function ProjectCard({ project }: ProjectCardProps) {
   return (
     <Link href={`/ecosystem/${project.id}`}>
-      <Card className="h-full hover:shadow-lg transition-shadow">
+      <Card className="h-full hover:shadow-lg transition-shadow bg-white">
         <div className="p-4 space-y-4">
           <div className="flex items-center space-x-3">
-            <div className="relative w-12 h-12">
+            <div className="relative w-12 h-12 bg-gray-50 rounded-lg flex items-center justify-center">
               <Image
                 src={project.logo}
                 alt={`${project.name} logo`}
-                fill
-                className="rounded-lg object-contain"
+                width={40}
+                height={40}
+                className="object-contain"
+                onError={(e) => {
+                  // Fallback to a default image if logo fails to load
+                  (e.target as HTMLImageElement).src = '/images/default-project.svg';
+                }}
               />
             </div>
             <div>
-              <h3 className="font-semibold text-lg">{project.name}</h3>
+              <h3 className="font-semibold text-lg text-gray-900">{project.name}</h3>
               <div className="flex gap-2">
-                <Badge variant="outline">{project.category}</Badge>
-                <Badge variant={project.status === 'live' ? 'default' : 'secondary'}>
+                <Badge variant="outline" className="capitalize">{project.category}</Badge>
+                <Badge variant={project.status === 'live' ? 'default' : 'secondary'} className="capitalize">
                   {project.status}
                 </Badge>
                 {project.isVerified && (
@@ -48,25 +53,25 @@ export function ProjectCard({ project }: ProjectCardProps) {
               {project.stats.tvl !== undefined && (
                 <div>
                   <p className="text-sm text-gray-500">TVL</p>
-                  <p className="font-medium">${formatNumber(project.stats.tvl)}</p>
+                  <p className="font-medium text-gray-900">${formatNumber(project.stats.tvl)}</p>
                 </div>
               )}
               {project.stats.dailyActiveUsers !== undefined && (
                 <div>
                   <p className="text-sm text-gray-500">Daily Users</p>
-                  <p className="font-medium">{formatNumber(project.stats.dailyActiveUsers)}</p>
+                  <p className="font-medium text-gray-900">{formatNumber(project.stats.dailyActiveUsers)}</p>
                 </div>
               )}
               {project.stats.monthlyVolume !== undefined && (
                 <div>
                   <p className="text-sm text-gray-500">Monthly Volume</p>
-                  <p className="font-medium">${formatNumber(project.stats.monthlyVolume)}</p>
+                  <p className="font-medium text-gray-900">${formatNumber(project.stats.monthlyVolume)}</p>
                 </div>
               )}
               {project.token?.marketCap !== undefined && (
                 <div>
                   <p className="text-sm text-gray-500">Market Cap</p>
-                  <p className="font-medium">${formatNumber(project.token.marketCap)}</p>
+                  <p className="font-medium text-gray-900">${formatNumber(project.token.marketCap)}</p>
                 </div>
               )}
             </div>
@@ -74,7 +79,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
 
           <div className="flex flex-wrap gap-2">
             {project.chains.map(chain => (
-              <Badge key={chain} variant="outline" className="text-xs">
+              <Badge key={chain} variant="outline" className="text-xs capitalize">
                 {chain}
               </Badge>
             ))}

@@ -25,11 +25,11 @@ const SECURITY_HEADERS = {
   'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=(), bluetooth=(), serial=(), midi=(), magnetometer=(), accelerometer=(), gyroscope=()',
   'Content-Security-Policy': `
     default-src 'self';
-    script-src 'self' 'unsafe-inline' 'unsafe-eval';
+    script-src 'self' 'unsafe-inline' 'unsafe-eval' https://va.vercel-scripts.com;
     style-src 'self' 'unsafe-inline' https://fonts.googleapis.com;
     img-src 'self' data: https: blob:;
     font-src 'self' https://fonts.gstatic.com;
-    connect-src 'self' https://api.polkadot.io https://api.coingecko.com wss://rpc.polkadot.io;
+    connect-src 'self' https://api.polkadot.io https://api.coingecko.com wss://rpc.polkadot.io https://va.vercel-scripts.com;
     frame-ancestors 'none';
     form-action 'self';
     base-uri 'self';

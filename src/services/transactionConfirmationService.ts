@@ -3,6 +3,7 @@ import { securityAuditService } from './securityAuditService';
 import { securityLogger, SecurityEventType } from '@/utils/securityLogger';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import { web3FromAddress } from '@polkadot/extension-dapp';
+import type { Signer } from '@polkadot/types/types/extrinsic';
 
 interface TransactionDetails {
   type: string;
@@ -62,72 +63,76 @@ class TransactionConfirmationService {
 
       // Sign and send transaction
       return new Promise((resolve, reject) => {
-        tx.signAndSend(details.from, { signer: injector.signer }, ({ status, events, dispatchError }) => {
-          try {
-            if (status.isInBlock || status.isFinalized) {
-              const blockHash = status.asInBlock.toHex();
+        tx.signAndSend(
+          details.from,
+          { signer: injector.signer as unknown as Signer },
+          ({ status, events, dispatchError }) => {
+            try {
+              if (status.isInBlock || status.isFinalized) {
+                const blockHash = status.asInBlock.toHex();
 
-              if (dispatchError) {
-                const errorMessage = dispatchError.isModule 
-                  ? `Module Error: ${dispatchError.asModule.toString()}`
-                  : dispatchError.toString();
+                if (dispatchError) {
+                  const errorMessage = dispatchError.isModule 
+                    ? `Module Error: ${dispatchError.asModule.toString()}`
+                    : dispatchError.toString();
 
-                securityLogger.logEvent({
-                  type: SecurityEventType.TRANSACTION_FAILURE,
-                  timestamp: new Date().toISOString(),
-                  details: {
-                    ...details,
-                    error: errorMessage,
-                    blockHash
-                  }
-                });
-
-                resolve({
-                  success: false,
-                  error: errorMessage,
-                  blockHash
-                });
-              } else {
-                // Check for ExtrinsicSuccess event
-                const successEvent = events.find(({ event }) => 
-                  event.section === 'system' && event.method === 'ExtrinsicSuccess'
-                );
-
-                if (successEvent) {
                   securityLogger.logEvent({
-                    type: SecurityEventType.TRANSACTION_SUCCESS,
+                    type: SecurityEventType.TRANSACTION_FAILURE,
                     timestamp: new Date().toISOString(),
                     details: {
                       ...details,
+                      error: errorMessage,
                       blockHash
                     }
                   });
 
                   resolve({
-                    success: true,
-                    hash: tx.hash.toHex(),
+                    success: false,
+                    error: errorMessage,
                     blockHash
                   });
+                } else {
+                  // Check for ExtrinsicSuccess event
+                  const successEvent = events.find(({ event }) => 
+                    event.section === 'system' && event.method === 'ExtrinsicSuccess'
+                  );
+
+                  if (successEvent) {
+                    securityLogger.logEvent({
+                      type: SecurityEventType.TRANSACTION_SUCCESS,
+                      timestamp: new Date().toISOString(),
+                      details: {
+                        ...details,
+                        blockHash
+                      }
+                    });
+
+                    resolve({
+                      success: true,
+                      hash: tx.hash.toHex(),
+                      blockHash
+                    });
+                  }
                 }
               }
+            } catch (error) {
+              const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+              securityLogger.logEvent({
+                type: SecurityEventType.TRANSACTION_FAILURE,
+                timestamp: new Date().toISOString(),
+                details: {
+                  ...details,
+                  error: errorMessage
+                }
+              });
+              reject(new PolkadotHubError(
+                errorMessage,
+                ErrorCodes.TX.FAILED,
+                'Failed to process transaction'
+              ));
             }
-          } catch (error) {
-            const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-            securityLogger.logEvent({
-              type: SecurityEventType.TRANSACTION_FAILURE,
-              timestamp: new Date().toISOString(),
-              details: {
-                ...details,
-                error: errorMessage
-              }
-            });
-            reject(new PolkadotHubError(
-              errorMessage,
-              ErrorCodes.TX.FAILED,
-              'Failed to process transaction'
-            ));
           }
-        }).catch(error => {
+        ).catch(error => {
           const errorMessage = error instanceof Error ? error.message : 'Unknown error';
           securityLogger.logEvent({
             type: SecurityEventType.TRANSACTION_FAILURE,
