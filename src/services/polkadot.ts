@@ -6,6 +6,10 @@ import { handleError, PolkadotHubError, ErrorCodes } from '@/utils/errorHandling
 import { securityLogger, SecurityEventType } from '@/utils/securityLogger';
 import { validateAddress } from '@polkadot/util-crypto';
 import { cryptoWaitReady } from '@polkadot/util-crypto';
+import type { ProviderInterface } from '@polkadot/rpc-provider/types';
+
+// Custom type that satisfies both WsProvider and ProviderInterface
+type Provider = WsProvider & ProviderInterface;
 
 interface StakingResponse {
   balance: string;
@@ -22,7 +26,7 @@ interface StakingResponse {
 export const initializeApi = async (endpoint: string = 'wss://rpc.polkadot.io'): Promise<ApiPromise> => {
   try {
     // Create provider
-    const provider = new WsProvider(endpoint);
+    const provider = new WsProvider(endpoint) as Provider;
 
     // Initialize API with custom options
     const api = await ApiPromise.create({
@@ -44,7 +48,7 @@ export class PolkadotService {
   private static instance: PolkadotService;
   public api: ApiPromise | null = null;
   private wsEndpoint: string;
-  private provider: WsProvider | null = null;
+  private provider: Provider | undefined = undefined;
   private connectionAttempts = 0;
   private readonly maxConnectionAttempts = 5;
   private readonly reconnectDelay = 2000;
@@ -118,7 +122,7 @@ export class PolkadotService {
           await this.cleanup();
 
           // Create new provider with optimized settings
-          this.provider = new WsProvider(this.wsEndpoint, 1000);
+          this.provider = new WsProvider(this.wsEndpoint, 1000) as Provider;
 
           // Create API instance with minimal settings
           this.api = await ApiPromise.create({
@@ -191,7 +195,7 @@ export class PolkadotService {
       }
       if (this.provider) {
         this.provider.disconnect();
-        this.provider = null;
+        this.provider = undefined;
       }
     } catch (error) {
       console.warn('Error during cleanup:', error);

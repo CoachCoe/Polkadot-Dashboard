@@ -41,6 +41,24 @@ A modern, feature-rich dashboard for the Polkadot ecosystem, built with Next.js,
   - GitHub statistics
   - Performance analytics
 
+### Product Roadmap
+- Overview of upcoming products and features
+- Status tracking for each product
+- Detailed feature lists
+- Development progress indicators
+- Three main products:
+  - Polkadot Hub: Central dashboard for asset management and governance
+  - PDP (Polkadot Development Platform): Comprehensive developer tools
+  - Mobile Payments App: Seamless mobile payment solution
+
+### Social Integration
+- Direct links to Polkadot's social media
+- Community engagement through:
+  - X (Twitter) updates
+  - Discord community
+  - LinkedIn network
+- Real-time social feed integration (coming soon)
+
 ### Wallet Integration
 - Seamless wallet connection via Polkadot.js extension
 - Multi-account support
@@ -100,18 +118,19 @@ src/
 │   ├── ecosystem/         # Ecosystem explorer pages
 │   ├── staking/          # Staking management pages
 │   ├── governance/       # Governance pages
-│   └── portfolio/        # Portfolio pages
+│   └── home/        # Home pages
 ├── components/            # React components
 │   ├── ecosystem/        # Ecosystem-specific components
 │   ├── staking/         # Staking components
 │   ├── governance/      # Governance components
-│   ├── portfolio/        # Portfolio components
+│   ├── home/        # Home components
 │   └── ui/               # Reusable UI components
 ├── services/             # Service layer
 │   ├── polkadotApiService # Polkadot API integration
 │   ├── portfolioService   # Portfolio management
 │   ├── stakingService    # Staking operations
 │   └── governanceService # Governance operations
+│   └── homeService   # Home management
 ├── store/               # State management
 ├── hooks/               # Custom React hooks
 ├── types/               # TypeScript type definitions

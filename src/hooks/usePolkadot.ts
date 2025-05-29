@@ -4,6 +4,7 @@ import { useWalletStore } from '@/store/useWalletStore';
 import { WalletAccount } from '@talismn/connect-wallets';
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { securityLogger, SecurityEventType } from '@/utils/securityLogger';
+import type { ProviderInterface } from '@polkadot/rpc-provider/types';
 
 interface UsePolkadotReturn {
   isConnected: boolean;
@@ -13,30 +14,33 @@ interface UsePolkadotReturn {
   api: ApiPromise | null;
   connect: () => Promise<void>;
   disconnect: () => void;
+  error: string | null;
 }
 
 export function usePolkadot(): UsePolkadotReturn {
-  const { selectedAccount, connect, disconnect, accounts } = useWalletStore();
+  const { selectedAccount, disconnect: walletDisconnect, accounts } = useWalletStore();
   const [isConnected, setIsConnected] = useState(false);
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [api, setApi] = useState<ApiPromise | null>(null);
   const [reconnectAttempts, setReconnectAttempts] = useState(0);
   const MAX_RECONNECT_ATTEMPTS = 5;
   const RECONNECT_DELAY = 5000;
+  const [error, setError] = useState<string | null>(null);
 
   const initApi = async () => {
     try {
-      const provider = new WsProvider(process.env.NEXT_PUBLIC_WS_ENDPOINT || 'wss://rpc.polkadot.io');
+      const wsProvider = new WsProvider(process.env.NEXT_PUBLIC_WS_ENDPOINT || 'wss://rpc.polkadot.io');
+      const provider = wsProvider as unknown as ProviderInterface;
       const newApi = await ApiPromise.create({ provider });
       
-      // Set up event handlers
-      provider.on('disconnected', () => {
+      wsProvider.on('disconnected', () => {
         console.warn('API disconnected. Attempting to reconnect...');
         setIsConnected(false);
+        setError('Disconnected from Polkadot network');
         handleReconnect();
       });
 
-      provider.on('error', async (error) => {
+      wsProvider.on('error', async (error) => {
         console.error('API error:', error);
         await securityLogger.logEvent({
           type: SecurityEventType.API_ERROR,
@@ -44,12 +48,14 @@ export function usePolkadot(): UsePolkadotReturn {
           details: { error: error.message }
         });
         setIsConnected(false);
+        setError(`Connection error: ${error.message}`);
         handleReconnect();
       });
 
       await newApi.isReady;
       setApi(newApi);
       setIsConnected(true);
+      setError(null);
       setReconnectAttempts(0);
     } catch (error) {
       console.error('Failed to connect to Polkadot node:', error);
@@ -59,20 +65,18 @@ export function usePolkadot(): UsePolkadotReturn {
         details: { error: error instanceof Error ? error.message : 'Unknown error' }
       });
       setIsConnected(false);
+      setError(error instanceof Error ? error.message : 'Failed to connect to Polkadot network');
       handleReconnect();
     }
   };
 
   const handleReconnect = () => {
-    if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-      console.error('Max reconnection attempts reached');
-      return;
+    if (reconnectAttempts < MAX_RECONNECT_ATTEMPTS) {
+      setTimeout(() => {
+        setReconnectAttempts(prev => prev + 1);
+        void initApi();
+      }, RECONNECT_DELAY);
     }
-
-    setTimeout(() => {
-      setReconnectAttempts(prev => prev + 1);
-      void initApi();
-    }, RECONNECT_DELAY);
   };
 
   useEffect(() => {
@@ -87,7 +91,7 @@ export function usePolkadot(): UsePolkadotReturn {
 
   const handleConnect = async () => {
     try {
-      await connect();
+      await initApi();
       setIsWalletConnected(true);
     } catch (error) {
       console.error('Failed to connect wallet:', error);
@@ -102,7 +106,12 @@ export function usePolkadot(): UsePolkadotReturn {
   };
 
   const handleDisconnect = () => {
-    disconnect();
+    if (api) {
+      void api.disconnect();
+      setApi(null);
+      setIsConnected(false);
+    }
+    walletDisconnect();
     setIsWalletConnected(false);
   };
 
@@ -114,5 +123,6 @@ export function usePolkadot(): UsePolkadotReturn {
     api,
     connect: handleConnect,
     disconnect: handleDisconnect,
+    error,
   };
 } 

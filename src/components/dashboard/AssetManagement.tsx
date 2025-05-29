@@ -1,79 +1,69 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/Tabs';
-import { TransactionList } from '@/components/portfolio/TransactionList';
-import { TokenList } from '@/components/portfolio/TokenList';
-import { BridgeTransfer } from '@/components/bridge/BridgeTransfer';
-import { OnRamp } from '@/components/bridge/OnRamp';
-import { useWalletStore } from '@/store/useWalletStore';
-import { portfolioService } from '@/services/portfolioService';
-import type { Transaction } from '@/services/portfolioService';
+import { TokenList } from '@/components/dashboard/TokenList';
+import { homeService, type Transaction } from '@/services/homeService';
 
-export function AssetManagement() {
+export const AssetManagement: React.FC = () => {
   const [activeTab, setActiveTab] = useState('tokens');
-  const { selectedAccount } = useWalletStore();
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    async function loadTransactions() {
-      if (!selectedAccount) return;
-      
+    const loadTransactions = async () => {
       try {
         setIsLoading(true);
-        const data = await portfolioService.getTransactions(selectedAccount.address);
-        setTransactions(data);
+        const data = await homeService.getHomeData('');
+        setTransactions(data.transactions);
       } catch (error) {
         console.error('Failed to load transactions:', error);
       } finally {
         setIsLoading(false);
       }
-    }
+    };
 
     void loadTransactions();
-  }, [selectedAccount]);
+  }, []);
 
   return (
     <Card className="p-6">
-      <div className="flex items-center justify-between mb-6">
+      <div className="flex justify-between items-center mb-6">
         <h2 className="text-2xl font-bold">Asset Management</h2>
-        <div className="flex space-x-2">
-          <Button variant="outline" onClick={() => setActiveTab('bridge')}>
-            Bridge
+        <div className="flex gap-2">
+          <Button
+            variant={activeTab === 'tokens' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('tokens')}
+          >
+            Tokens
           </Button>
-          <Button variant="outline" onClick={() => setActiveTab('onramp')}>
-            Buy DOT
+          <Button
+            variant={activeTab === 'transactions' ? 'default' : 'outline'}
+            onClick={() => setActiveTab('transactions')}
+          >
+            Transactions
           </Button>
         </div>
       </div>
 
-      <Tabs value={activeTab} onValueChange={setActiveTab}>
-        <TabsList className="mb-6">
-          <TabsTrigger value="tokens">Tokens</TabsTrigger>
-          <TabsTrigger value="transactions">Transactions</TabsTrigger>
-          <TabsTrigger value="bridge">Bridge</TabsTrigger>
-          <TabsTrigger value="onramp">Buy DOT</TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="tokens">
-          <TokenList />
-        </TabsContent>
-
-        <TabsContent value="transactions">
-          <TransactionList transactions={transactions} isLoading={isLoading} />
-        </TabsContent>
-
-        <TabsContent value="bridge">
-          <BridgeTransfer />
-        </TabsContent>
-
-        <TabsContent value="onramp">
-          <OnRamp />
-        </TabsContent>
-      </Tabs>
+      {activeTab === 'tokens' ? (
+        <TokenList transactions={transactions} isLoading={isLoading} />
+      ) : (
+        <div className="space-y-4">
+          {transactions.map((tx) => (
+            <div key={tx.hash} className="p-4 bg-gray-50 rounded-lg">
+              <div className="flex justify-between">
+                <span className="font-medium">{tx.type}</span>
+                <span className="font-medium">{tx.amount} DOT</span>
+              </div>
+              <div className="text-sm text-gray-500 mt-1">
+                {new Date(tx.timestamp).toLocaleString()}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
-} 
+}; 

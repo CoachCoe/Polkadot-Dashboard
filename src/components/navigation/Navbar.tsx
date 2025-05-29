@@ -52,6 +52,12 @@ export function Navbar() {
               >
                 Ecosystem
               </Link>
+              <Link 
+                href="/roadmap" 
+                className={`font-medium ${pathname === '/roadmap' ? 'text-[#E6007A]' : 'text-gray-600 hover:text-gray-900'}`}
+              >
+                Product Roadmap
+              </Link>
             </div>
           </div>
 

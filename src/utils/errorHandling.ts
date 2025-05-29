@@ -213,6 +213,14 @@ export const ErrorCodes = {
     ENCRYPTION_FAILED: 'ENCRYPTION_FAILED' as const,
     DECRYPTION_FAILED: 'DECRYPTION_FAILED' as const,
     DATA_EXPIRED: 'DATA_EXPIRED' as const
+  },
+
+  // Home errors
+  HOME: {
+    STATS_ERROR: 'HOME_STATS_ERROR' as const,
+    BALANCE_ERROR: 'HOME_BALANCE_ERROR' as const,
+    FETCH_ERROR: 'HOME_FETCH_ERROR' as const,
+    UPDATE_ERROR: 'HOME_UPDATE_ERROR' as const
   }
 } as const;
 
@@ -407,7 +415,13 @@ const SAFE_ERROR_MESSAGES: Record<ErrorCode, string> = {
   'UNAUTHORIZED_ACCESS': 'Unauthorized access',
   'ENCRYPTION_FAILED': 'Failed to encrypt data',
   'DECRYPTION_FAILED': 'Failed to decrypt data',
-  'DATA_EXPIRED': 'Data has expired'
+  'DATA_EXPIRED': 'Data has expired',
+
+  // Home errors
+  'HOME_STATS_ERROR': 'Failed to fetch home statistics',
+  'HOME_BALANCE_ERROR': 'Failed to fetch home balance',
+  'HOME_FETCH_ERROR': 'Failed to fetch home data',
+  'HOME_UPDATE_ERROR': 'Failed to update home data'
 };
 
 export class PolkadotHubError extends Error {
@@ -577,5 +591,11 @@ export const ErrorMessages: Record<string, string> = {
   'GOVERNANCE_PROPOSAL_ERROR': 'Failed to submit proposal',
   'GOVERNANCE_VOTE_ERROR': 'Failed to submit vote',
   'GOVERNANCE_REFERENDUM_ERROR': 'Failed to fetch referendum information',
-  'GOVERNANCE_DELEGATION_ERROR': 'Failed to delegate vote'
+  'GOVERNANCE_DELEGATION_ERROR': 'Failed to delegate vote',
+
+  // Home errors
+  'HOME_STATS_ERROR': 'Failed to fetch home statistics',
+  'HOME_BALANCE_ERROR': 'Failed to fetch home balance',
+  'HOME_FETCH_ERROR': 'Failed to fetch home data',
+  'HOME_UPDATE_ERROR': 'Failed to update home data'
 }; 

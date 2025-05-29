@@ -3,6 +3,7 @@
 import React, { Suspense } from 'react';
 import { Providers } from '@/app/providers';
 import { Navbar } from '@/components/navigation/Navbar';
+import { Footer } from '@/components/layout/Footer';
 import { AnalyticsWrapper } from '@/utils/analytics';
 import { WalletInitializer } from './WalletInitializer';
 import { LoadingSpinner } from './common/LoadingSpinner';
@@ -17,17 +18,13 @@ export function RootLayoutWrapper({ children }: { children: React.ReactNode }) {
       <WalletInitializer />
       <AnalyticsWrapper>
         <Providers>
-          <Navbar />
-          <main className="flex-grow">
-            {children}
-          </main>
-          <footer className="bg-white border-t border-gray-200 mt-auto">
-            <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
-              <div className="text-center text-sm text-gray-500">
-                © {new Date().getFullYear()} Polkadot Dashboard. Built with ♥ for the Polkadot community.
-              </div>
-            </div>
-          </footer>
+          <div className="min-h-screen flex flex-col">
+            <Navbar />
+            <main className="flex-grow">
+              {children}
+            </main>
+            <Footer />
+          </div>
         </Providers>
       </AnalyticsWrapper>
     </Suspense>
