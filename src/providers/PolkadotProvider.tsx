@@ -10,13 +10,14 @@ interface PolkadotProviderProps {
 }
 
 export function PolkadotProvider({ children }: PolkadotProviderProps) {
-  const [isInitialized, setIsInitialized] = useState(false);
+  const [isInitialized, setIsInitialized] = useState(true); // Start as true to avoid unnecessary loading state
   const [error, setError] = useState<Error | null>(null);
   const [retryCount, setRetryCount] = useState(0);
   const isConnectingRef = useRef(false);
   const cleanupInProgressRef = useRef(false);
   const MAX_RETRIES = 3;
   const RETRY_DELAY = 5000;
+  const CONNECTION_TIMEOUT = 30000; // 30 seconds timeout to match service
 
   const initializePolkadotApi = useCallback(async () => {
     // Prevent multiple simultaneous connection attempts
@@ -28,7 +29,18 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
       isConnectingRef.current = true;
       setError(null);
       
+      // Set a timeout for the entire connection process
+      const timeoutId = setTimeout(() => {
+        if (isConnectingRef.current) {
+          isConnectingRef.current = false;
+          setError(new Error('Connection timed out. Please check your internet connection and try again.'));
+          setIsInitialized(true); // Allow rendering the app even if connection failed
+        }
+      }, CONNECTION_TIMEOUT);
+      
       const api = await polkadotService.connect();
+      
+      clearTimeout(timeoutId);
       
       // Set up reconnection handler
       api.on('disconnected', async () => {
@@ -37,19 +49,19 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
         
         if (retryCount < MAX_RETRIES) {
           setRetryCount(prev => prev + 1);
-          // Clear the connecting flag before attempting reconnection
           isConnectingRef.current = false;
           setTimeout(() => {
             void initializePolkadotApi();
           }, RETRY_DELAY * Math.pow(2, retryCount)); // Exponential backoff
         } else {
           setError(new Error('Failed to maintain connection after multiple attempts'));
+          setIsInitialized(true); // Allow rendering the app even if connection failed
         }
       });
 
       api.on('connected', () => {
         if (cleanupInProgressRef.current) return;
-        setRetryCount(0); // Reset retry count on successful connection
+        setRetryCount(0);
         setIsInitialized(true);
         isConnectingRef.current = false;
       });
@@ -59,9 +71,16 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
         console.error('API error:', err);
         setError(err);
         isConnectingRef.current = false;
+        setIsInitialized(true); // Allow rendering the app even if there's an error
       });
 
-      await portfolioService.init(api);
+      try {
+        await portfolioService.init(api);
+      } catch (error) {
+        console.warn('Portfolio service initialization failed:', error);
+        // Don't block the app for portfolio service errors
+      }
+
       if (!cleanupInProgressRef.current) {
         setIsInitialized(true);
         isConnectingRef.current = false;
@@ -81,6 +100,7 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
         }, RETRY_DELAY * Math.pow(2, retryCount)); // Exponential backoff
       }
       isConnectingRef.current = false;
+      setIsInitialized(true); // Allow rendering the app even if initialization failed
     }
   }, [retryCount]);
 
@@ -90,6 +110,7 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
       return;
     }
 
+    // Start connection process
     void initializePolkadotApi();
 
     // Cleanup on unmount
@@ -113,6 +134,7 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
     return <>{children}</>;
   }
 
+  // Show loading state only if explicitly set to false
   if (!isInitialized && !error) {
     return (
       <div className="fixed inset-0 flex items-center justify-center bg-white/80 backdrop-blur-sm">
@@ -126,24 +148,30 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
     );
   }
 
+  // Show error as a dismissible notification instead of a full-screen block
   if (error) {
     return (
-      <div className="fixed inset-0 flex items-center justify-center bg-white/80 backdrop-blur-sm">
-        <div className="text-center max-w-md mx-auto p-6">
-          <div className="text-red-500 text-xl mb-4">Connection Error</div>
-          <p className="text-gray-600 mb-4">{error.message}</p>
-          <button
-            onClick={() => {
-              setRetryCount(0);
-              isConnectingRef.current = false;
-              void initializePolkadotApi();
-            }}
-            className="px-4 py-2 bg-pink-500 text-white rounded-lg hover:bg-pink-600 transition-colors"
-          >
-            Retry Connection
-          </button>
+      <>
+        {children}
+        <div className="fixed bottom-4 right-4 max-w-md bg-white rounded-lg shadow-lg border border-red-100 p-4">
+          <div className="flex items-start">
+            <div className="flex-1">
+              <h3 className="text-red-500 font-medium">Connection Error</h3>
+              <p className="text-sm text-gray-600 mt-1">{error.message}</p>
+            </div>
+            <button
+              onClick={() => {
+                setRetryCount(0);
+                isConnectingRef.current = false;
+                void initializePolkadotApi();
+              }}
+              className="ml-4 px-3 py-1 text-sm bg-pink-500 text-white rounded hover:bg-pink-600 transition-colors"
+            >
+              Retry
+            </button>
+          </div>
         </div>
-      </div>
+      </>
     );
   }
 

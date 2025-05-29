@@ -1,18 +1,26 @@
 import { web3FromAddress } from '@polkadot/extension-dapp';
-import type { InjectedExtension, InjectedAccount, Unsubcall } from '@polkadot/extension-inject/types';
+import type { InjectedExtension, InjectedAccount, Unsubcall, InjectedWindowProvider } from '@polkadot/extension-inject/types';
 import type { SignerPayloadJSON, SignerResult } from '@polkadot/types/types/extrinsic';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
 import type { HexString } from '@polkadot/util/types';
 import { default as TransportWebUSB } from '@ledgerhq/hw-transport-webusb';
 
+// Define MetaMask interface
 interface MetaMaskEthereum {
-  isMetaMask: boolean;
-  request: (args: { method: string; params?: any[] }) => Promise<any>;
+  isMetaMask?: boolean;
+  request: (args: { method: string; params?: unknown[] }) => Promise<unknown>;
+  on: (eventName: string, handler: (...args: unknown[]) => void) => void;
+  removeListener: (eventName: string, handler: (...args: unknown[]) => void) => void;
+  selectedAddress: string | null;
+  chainId: string;
 }
 
-interface ExtendedWindow extends Window {
-  ethereum?: MetaMaskEthereum;
-  injectedWeb3?: Record<string, unknown>;
+// Augment the window interface
+declare global {
+  interface Window {
+    ethereum?: MetaMaskEthereum;
+    injectedWeb3?: Record<string, InjectedWindowProvider>;
+  }
 }
 
 export interface WalletProvider {
@@ -35,7 +43,7 @@ export interface WalletAccount extends Omit<InjectedAccount, 'meta'> {
   };
 }
 
-class WalletService {
+export class WalletService {
   private static instance: WalletService;
   private providers: WalletProvider[] = [
     {
@@ -94,23 +102,27 @@ class WalletService {
     }
   ];
 
-  private extensions: InjectedExtension[] = [];
-  private accounts: WalletAccount[] = [];
-  private initialized = false;
+  private accounts: InjectedAccount[] = [];
+  private unsubscribeCallback: Unsubcall | null = null;
+  private isInitialized = false;
 
   private constructor() {}
 
-  static getInstance(): WalletService {
+  public static getInstance(): WalletService {
     if (!WalletService.instance) {
       WalletService.instance = new WalletService();
     }
     return WalletService.instance;
   }
 
+  private getInjectedWeb3(): Record<string, InjectedWindowProvider> | undefined {
+    if (typeof window === 'undefined') return undefined;
+    return window.injectedWeb3;
+  }
+
   private async detectMetaMask(): Promise<boolean> {
     if (typeof window === 'undefined') return false;
-    const win = window as ExtendedWindow;
-    return !!win.ethereum?.isMetaMask;
+    return !!(window as { ethereum?: { isMetaMask?: boolean } }).ethereum?.isMetaMask;
   }
 
   private async detectLedger(): Promise<boolean> {
@@ -132,7 +144,7 @@ class WalletService {
       );
     }
 
-    const ethereum = (window as ExtendedWindow).ethereum!;
+    const ethereum = window.ethereum!;
     await ethereum.request({ method: 'eth_requestAccounts' });
     
     const metaMaskExtension: InjectedExtension = {
@@ -140,7 +152,7 @@ class WalletService {
       version: '1.0.0',
       accounts: {
         get: async () => {
-          const accounts = await ethereum.request({ method: 'eth_accounts' });
+          const accounts = await ethereum.request({ method: 'eth_accounts' }) as string[];
           return accounts.map((address: string): WalletAccount => ({
             address,
             type: 'ethereum',
@@ -153,7 +165,7 @@ class WalletService {
         },
         subscribe: (cb: (accounts: InjectedAccount[]) => void | Promise<void>): Unsubcall => {
           const handle = setInterval(async () => {
-            const accounts = await ethereum.request({ method: 'eth_accounts' });
+            const accounts = await ethereum.request({ method: 'eth_accounts' }) as string[];
             void cb(accounts.map((address: string): WalletAccount => ({
               address,
               type: 'ethereum',
@@ -254,74 +266,82 @@ class WalletService {
   }
 
   async init(): Promise<void> {
-    if (this.initialized) return;
+    if (this.isInitialized) {
+      return;
+    }
 
     try {
-      const { web3Enable } = await import('@polkadot/extension-dapp');
-      const extensions = await web3Enable('Polkadot Hub');
-      
+      let extensions: InjectedExtension[] = [];
+
+      // Initialize Polkadot.js and other injected extensions
+      const injectedWeb3 = this.getInjectedWeb3();
+      if (injectedWeb3) {
+        const web3Extensions = Object.values(injectedWeb3);
+        if (web3Extensions.length > 0) {
+          const enablePromises = web3Extensions.map(extension => 
+            extension.enable?.('Polkadot Hub').catch(error => {
+              console.warn(`Failed to enable extension: ${error.message}`);
+              return null;
+            })
+          );
+
+          const enabledWeb3Extensions = (await Promise.all(enablePromises))
+            .filter((ext): ext is InjectedExtension => ext !== null);
+          extensions = extensions.concat(enabledWeb3Extensions);
+        }
+      }
+
       // Initialize MetaMask if available
       try {
-        if (await this.detectMetaMask()) {
-          const metaMaskExt = await this.initializeMetaMask();
-          extensions.push(...metaMaskExt);
-        }
+        const metaMaskExtensions = await this.initializeMetaMask();
+        extensions = extensions.concat(metaMaskExtensions);
       } catch (error) {
         console.warn('MetaMask initialization failed:', error);
       }
 
       // Initialize Ledger if available
       try {
-        if (await this.detectLedger()) {
-          const ledgerExt = await this.initializeLedger();
-          extensions.push(...ledgerExt);
-        }
+        const ledgerExtensions = await this.initializeLedger();
+        extensions = extensions.concat(ledgerExtensions);
       } catch (error) {
         console.warn('Ledger initialization failed:', error);
       }
 
-      this.extensions = extensions;
-
-      // Update provider installation status
-      this.providers = this.providers.map(provider => {
-        const isInstalled = extensions.some(ext => 
-          ext.name.toLowerCase().includes(provider.id.toLowerCase())
+      if (extensions.length === 0) {
+        throw new PolkadotHubError(
+          'No extensions enabled',
+          ErrorCodes.WALLET.EXTENSION_LOAD_ERROR,
+          'No wallet extensions were enabled'
         );
-        
-        const checkInstallation = async () => {
-          if (provider.id === 'metamask') return this.detectMetaMask();
-          if (provider.id === 'ledger') return this.detectLedger();
-          return isInstalled;
-        };
+      }
 
-        return {
-          ...provider,
-          installed: checkInstallation()
-        };
-      });
+      // Get accounts from all enabled extensions
+      const accountPromises = extensions.map(extension =>
+        extension.accounts.get().catch(error => {
+          console.warn(`Failed to get accounts from extension: ${error.message}`);
+          return [];
+        })
+      );
 
-      // Get all accounts from all extensions
-      const accountsPromises = this.extensions.map(ext => ext.accounts.get());
-      const accountArrays = await Promise.all(accountsPromises);
-      
-      this.accounts = accountArrays.flat().map(account => {
-        const source = (account as any).meta?.source || '';
-        return {
-          ...account,
-          provider: this.getProviderFromSource(source),
-          meta: {
-            ...(account as any).meta,
-            source
-          }
-        } as WalletAccount;
-      });
+      const accountArrays = await Promise.all(accountPromises);
+      this.accounts = accountArrays.flat();
 
-      this.initialized = true;
+      // Set up account change subscription for the first extension that supports it
+      for (const extension of extensions) {
+        if (typeof extension.accounts.subscribe === 'function') {
+          this.unsubscribeCallback = await extension.accounts.subscribe((newAccounts: InjectedAccount[]) => {
+            this.accounts = newAccounts;
+          });
+          break;
+        }
+      }
+
+      this.isInitialized = true;
     } catch (error) {
       throw new PolkadotHubError(
-        'Failed to initialize wallet service',
+        'Failed to initialize wallet',
         ErrorCodes.WALLET.EXTENSION_LOAD_ERROR,
-        'Could not initialize wallet connections'
+        error instanceof Error ? error.message : 'Unknown error occurred'
       );
     }
   }
@@ -338,45 +358,46 @@ class WalletService {
   }
 
   getAccounts(): WalletAccount[] {
-    return this.accounts;
+    return this.accounts.map(account => {
+      const walletAccount = account as unknown as WalletAccount;
+      if (walletAccount.meta?.source) {
+        walletAccount.meta.source = this.getProviderFromSource(walletAccount.meta.source);
+      }
+      return walletAccount;
+    });
   }
 
-  async getAccountSigner(address: string): Promise<any> {
+  async signPayload(address: string, payload: SignerPayloadJSON): Promise<SignerResult> {
     try {
       const injector = await web3FromAddress(address);
-      if (!injector?.signer) {
+      if (!injector?.signer?.signPayload) {
         throw new PolkadotHubError(
           'No signer found',
           ErrorCodes.WALLET.NO_SIGNER,
-          'No signer available for this account'
+          'No signer found for this address'
         );
       }
-      return injector.signer;
+      return await injector.signer.signPayload(payload);
     } catch (error) {
       throw new PolkadotHubError(
-        'Failed to get signer',
+        'Failed to sign payload',
         ErrorCodes.WALLET.SIGNER_ERROR,
-        'Could not get signer for the account'
+        error instanceof Error ? error.message : 'Unknown error occurred'
       );
     }
   }
 
-  async subscribeToBalanceChanges(
-    _address: string,
-    _callback: (balance: string) => void
-  ): Promise<() => void> {
-    // TODO: Implement balance subscription
-    return () => {};
-  }
-
   async disconnect(): Promise<void> {
+    if (this.unsubscribeCallback) {
+      this.unsubscribeCallback();
+      this.unsubscribeCallback = null;
+    }
     this.accounts = [];
-    this.extensions = [];
-    this.initialized = false;
+    this.isInitialized = false;
   }
 
   isConnected(): boolean {
-    return this.initialized && this.extensions.length > 0;
+    return this.isInitialized && this.accounts.length > 0;
   }
 
   hasAccounts(): boolean {

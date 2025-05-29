@@ -2,10 +2,7 @@ import React from 'react'
 import type { Metadata } from 'next'
 import { Inter } from 'next/font/google'
 import './globals.css'
-import { Providers } from './providers'
-import { Navbar } from '@/components/navigation/Navbar'
-import ClientOnly from '@/components/ClientOnly'
-import { Analytics } from '@vercel/analytics/react'
+import { RootLayoutWrapper } from '@/components/RootLayoutWrapper'
 
 const inter = Inter({ 
   subsets: ['latin'],
@@ -26,34 +23,17 @@ export const metadata: Metadata = {
   }
 }
 
-export default async function RootLayout({
+export default function RootLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
   return (
     <html lang="en" className={inter.variable}>
-      <head>
-        {/* Add CSRF token meta tag */}
-        <meta name="csrf-token" content={process.env.NEXT_PUBLIC_CSRF_TOKEN} />
-      </head>
       <body className={`${inter.className} antialiased bg-gray-50 min-h-screen flex flex-col`}>
-        <ClientOnly>
-          <Providers>
-            <Navbar />
-            <div className="flex-grow">
-              {children}
-            </div>
-            <footer className="bg-white border-t border-gray-200 mt-auto">
-              <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8 py-6">
-                <div className="text-center text-sm text-gray-500">
-                  © {new Date().getFullYear()} Polkadot Dashboard. Built with ♥ for the Polkadot community.
-                </div>
-              </div>
-            </footer>
-          </Providers>
-        </ClientOnly>
-        <Analytics />
+        <RootLayoutWrapper>
+          {children}
+        </RootLayoutWrapper>
       </body>
     </html>
   )

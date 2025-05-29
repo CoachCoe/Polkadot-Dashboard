@@ -116,20 +116,35 @@ class GovernanceService {
     try {
       if (!this.api) {
         log.info('Connecting to Polkadot API...');
-        this.api = await polkadotService.getApi();
+        const api = await polkadotService.getApi();
+        
+        // Wait for the API to be ready and have the required methods
+        await api.isReady;
+        
+        // Check if required methods are available
+        if (!api.query.referenda || !api.query.convictionVoting) {
+          throw new PolkadotHubError(
+            'Required governance methods not available',
+            ErrorCodes.API.ERROR,
+            'The governance functionality is not available on this network.'
+          );
+        }
+
+        this.api = api;
         log.info('Successfully connected to Polkadot API');
       }
-      if (!this.api?.isConnected) {
-        log.error('API connection check failed');
-        throw new PolkadotHubError(
-          'Failed to connect to network',
-          ErrorCodes.NETWORK.ERROR,
-          'Unable to establish connection to the blockchain network.'
-        );
+
+      if (!this.api.isConnected) {
+        log.warn('API disconnected, attempting to reconnect...');
+        this.api = null;
+        return this.getApi();
       }
+
       return this.api;
     } catch (error) {
       log.error('Failed to get API connection', error);
+      // Clear the API instance on error to force a fresh connection attempt
+      this.api = null;
       throw handleError(error);
     }
   }
@@ -250,40 +265,34 @@ class GovernanceService {
   async getTracks(): Promise<Track[]> {
     try {
       const api = await this.getApi();
-      
-      // Debug log the available API paths
-      log.debug('Available API paths:', {
-        referenda: Object.keys(api.query.referenda || {}),
-        consts: Object.keys(api.consts.referenda || {}),
-        query: Object.keys(api.query || {})
-      });
-
-      // Try different possible paths for tracks
+      const seenTrackIds = new Set<number>();
       let tracks: Track[] = [];
-      let seenTrackIds = new Set<number>();
 
-      // Try convictionVoting.classLocksFor
-      if (api.query.convictionVoting?.classLocksFor) {
-        log.debug('Using convictionVoting.classLocksFor for tracks');
-        const classIds = await api.query.convictionVoting.classLocksFor.entries();
-        tracks = classIds.map(([key]) => {
+      // Try different track query methods
+      if (api.query.referenda?.tracks) {
+        log.debug('Using referenda.tracks for track info');
+        const trackEntries = await api.query.referenda.tracks.entries();
+        tracks = trackEntries.map(([key, value]) => {
           const id = (key.args[0] as any).toNumber?.() || 0;
+          if (seenTrackIds.has(id)) return null;
           seenTrackIds.add(id);
+          
+          const track = value.toJSON() as any;
           return {
             id,
-            name: `Track ${id}`,
-            description: '',
-            minDeposit: formatBalance(0, { decimals: 10 }),
-            decisionPeriod: 0,
-            preparePeriod: 0,
-            decidingPeriod: 0,
-            confirmPeriod: 0,
-            minApproval: 0,
-            minSupport: 0
+            name: track?.name || `Track ${id}`,
+            description: track?.description || '',
+            minDeposit: formatBalance(track?.minDeposit || 0, { decimals: 10 }),
+            decisionPeriod: track?.decisionPeriod || 0,
+            preparePeriod: track?.preparePeriod || 0,
+            decidingPeriod: track?.decidingPeriod || 0,
+            confirmPeriod: track?.confirmPeriod || 0,
+            minApproval: track?.minApproval || 0.5,
+            minSupport: track?.minSupport || 0.5
           };
-        });
+        }).filter((track): track is Track => track !== null);
       }
-      // Try referenda.decidingCount
+      // Try referenda.decidingCount as fallback
       else if (api.query.referenda?.decidingCount) {
         log.debug('Using referenda.decidingCount for tracks');
         const trackCount = await api.query.referenda.decidingCount.entries();
@@ -294,74 +303,38 @@ class GovernanceService {
           return {
             id,
             name: `Track ${id}`,
-            description: '',
+            description: 'Governance Track',
             minDeposit: formatBalance(0, { decimals: 10 }),
             decisionPeriod: 0,
             preparePeriod: 0,
             decidingPeriod: 0,
             confirmPeriod: 0,
-            minApproval: 0,
-            minSupport: 0
-          };
-        }).filter((track): track is Track => track !== null);
-      }
-      // Try fellowship tracks as fallback
-      else if (api.query.fellowshipReferenda?.trackQueue) {
-        log.debug('Using fellowshipReferenda.trackQueue for tracks');
-        const fellowshipTracks = await api.query.fellowshipReferenda.trackQueue.entries();
-        tracks = fellowshipTracks.map(([key]) => {
-          const id = (key.args[0] as any).toNumber?.() || 0;
-          if (seenTrackIds.has(id)) return null;
-          seenTrackIds.add(id);
-          return {
-            id,
-            name: `Fellowship Track ${id}`,
-            description: 'Fellowship Governance Track',
-            minDeposit: formatBalance(0, { decimals: 10 }),
-            decisionPeriod: 0,
-            preparePeriod: 0,
-            decidingPeriod: 0,
-            confirmPeriod: 0,
-            minApproval: 0,
-            minSupport: 0
+            minApproval: 0.5,
+            minSupport: 0.5
           };
         }).filter((track): track is Track => track !== null);
       }
 
       if (tracks.length === 0) {
-        // If no tracks found, create default tracks 0-10
-        log.warn('No tracks found, using default tracks');
-        tracks = Array.from({ length: 11 }, (_, i) => {
-          if (seenTrackIds.has(i)) return null;
-          seenTrackIds.add(i);
-          return {
-            id: i,
-            name: `Track ${i}`,
-            description: 'Default Track',
-            minDeposit: formatBalance(0, { decimals: 10 }),
-            decisionPeriod: 0,
-            preparePeriod: 0,
-            decidingPeriod: 0,
-            confirmPeriod: 0,
-            minApproval: 0,
-            minSupport: 0
-          };
-        }).filter((track): track is Track => track !== null);
+        log.warn('No tracks found, using default track');
+        tracks = [{
+          id: 0,
+          name: 'Default Track',
+          description: 'Default Governance Track',
+          minDeposit: formatBalance(0, { decimals: 10 }),
+          decisionPeriod: 0,
+          preparePeriod: 0,
+          decidingPeriod: 0,
+          confirmPeriod: 0,
+          minApproval: 0.5,
+          minSupport: 0.5
+        }];
       }
 
-      // Sort tracks by ID to ensure consistent ordering
-      tracks.sort((a, b) => a.id - b.id);
-
-      log.info(`Successfully fetched ${tracks.length} tracks`);
       return tracks;
-
     } catch (error) {
-      log.error('Failed to fetch tracks:', error);
-      throw new PolkadotHubError(
-        'Failed to fetch tracks',
-        ErrorCodes.DATA.NOT_FOUND,
-        'Could not load governance tracks. Please try again.'
-      );
+      log.error('Failed to fetch tracks', error);
+      throw handleError(error);
     }
   }
 

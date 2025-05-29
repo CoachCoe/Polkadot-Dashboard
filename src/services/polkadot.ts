@@ -47,11 +47,29 @@ export class PolkadotService {
   private provider: WsProvider | null = null;
   private connectionAttempts = 0;
   private readonly maxConnectionAttempts = 5;
-  private readonly reconnectDelay = 5000;
+  private readonly reconnectDelay = 2000;
   private isConnecting = false;
+  private readonly defaultEndpoints = [
+    'wss://rpc.polkadot.io',
+    'wss://polkadot.api.onfinality.io/public-ws',
+    'wss://polkadot-rpc.dwellir.com',
+    'wss://polkadot-rpc-tn.dwellir.com',
+    'wss://polkadot.public.curie.radiumblock.co/ws'
+  ] as const;
+  private endpoints: string[];
+  private currentEndpointIndex: number = 0;
 
   private constructor() {
-    this.wsEndpoint = process.env.NEXT_PUBLIC_WS_ENDPOINT || 'wss://rpc.polkadot.io';
+    // Initialize with default endpoints
+    this.endpoints = [...this.defaultEndpoints];
+    this.wsEndpoint = this.defaultEndpoints[0];
+    
+    // Add environment endpoint if available and valid
+    const envEndpoint = process.env.NEXT_PUBLIC_WS_ENDPOINT;
+    if (envEndpoint && envEndpoint.trim() && envEndpoint.startsWith('wss://')) {
+      this.endpoints = [envEndpoint, ...this.defaultEndpoints];
+      this.wsEndpoint = envEndpoint;
+    }
   }
 
   public static getInstance(): PolkadotService {
@@ -59,6 +77,12 @@ export class PolkadotService {
       PolkadotService.instance = new PolkadotService();
     }
     return PolkadotService.instance;
+  }
+
+  private getNextEndpoint(): string {
+    this.currentEndpointIndex = (this.currentEndpointIndex + 1) % this.endpoints.length;
+    const nextEndpoint = this.endpoints[this.currentEndpointIndex];
+    return nextEndpoint || this.defaultEndpoints[0];
   }
 
   async connect(): Promise<ApiPromise> {
@@ -75,6 +99,7 @@ export class PolkadotService {
       }
 
       this.isConnecting = true;
+      console.log('Attempting to connect to Polkadot network...');
 
       // Initialize WASM crypto first
       try {
@@ -84,154 +109,144 @@ export class PolkadotService {
         console.warn('WASM crypto initialization failed:', error);
       }
 
-      // Create new provider if needed
-      if (!this.provider) {
-        this.provider = new WsProvider(this.wsEndpoint);
-      }
+      // Try each endpoint until one works
+      while (this.connectionAttempts < this.maxConnectionAttempts) {
+        try {
+          console.log(`Attempting connection to ${this.wsEndpoint} (Attempt ${this.connectionAttempts + 1}/${this.maxConnectionAttempts})`);
 
-      // Create API instance
-      this.api = await ApiPromise.create({
-        provider: this.provider,
-        noInitWarn: true,
-        throwOnConnect: true,
-      });
+          // Clean up any existing connections
+          await this.cleanup();
 
-      // Set up event handlers
-      this.setupEventHandlers();
+          // Create new provider with optimized settings
+          this.provider = new WsProvider(this.wsEndpoint, 1000);
 
-      // Wait for API to be ready
-      await this.api.isReady;
+          // Create API instance with minimal settings
+          this.api = await ApiPromise.create({
+            provider: this.provider,
+            noInitWarn: true,
+            throwOnConnect: false,
+            throwOnUnknown: false
+          });
 
-      // Reset connection attempts on successful connection
-      this.connectionAttempts = 0;
-      this.isConnecting = false;
+          // Set up event handlers
+          this.setupEventHandlers();
 
-      await securityLogger.logEvent({
-        type: SecurityEventType.API_ERROR,
-        timestamp: new Date().toISOString(),
-        details: {
-          event: 'NETWORK_CONNECT',
-          status: 'connected'
+          // Wait for API to be ready
+          await Promise.race([
+            this.api.isReady,
+            new Promise((_, reject) => 
+              setTimeout(() => reject(new Error('Connection timeout')), 60000) // Increased to 60 seconds
+            )
+          ]);
+
+          // Test a basic query to ensure the connection is working
+          const systemQuery = this.api?.query?.system;
+          if (!systemQuery?.number) {
+            throw new Error('Required system methods not available');
+          }
+          await systemQuery.number();
+
+          // Connection successful
+          this.connectionAttempts = 0;
+          this.isConnecting = false;
+          console.log('Successfully connected to', this.wsEndpoint);
+          return this.api;
+        } catch (error) {
+          console.warn(`Failed to connect to ${this.wsEndpoint}:`, error);
+          
+          // Clean up failed connection
+          await this.cleanup();
+          
+          // Try next endpoint
+          this.wsEndpoint = this.getNextEndpoint();
+          this.connectionAttempts++;
+          
+          if (this.connectionAttempts < this.maxConnectionAttempts) {
+            console.log(`Trying next endpoint: ${this.wsEndpoint}`);
+            await new Promise(resolve => setTimeout(resolve, this.reconnectDelay));
+            continue;
+          }
         }
-      });
-
-      return this.api;
-    } catch (error) {
-      this.isConnecting = false;
-      await this.handleConnectionError(error);
-      
-      // Attempt reconnection if within limits
-      if (this.connectionAttempts < this.maxConnectionAttempts) {
-        this.connectionAttempts++;
-        console.warn(`Connection attempt ${this.connectionAttempts} failed. Retrying...`);
-        await new Promise(resolve => setTimeout(resolve, this.reconnectDelay));
-        return this.connect();
       }
 
       throw new PolkadotHubError(
-        'Failed to connect to network after multiple attempts',
-        'NETWORK_ERROR',
-        'Unable to establish connection to the blockchain network.'
+        'Failed to connect to any endpoint',
+        ErrorCodes.NETWORK.CONNECTION_ERROR,
+        'Unable to connect to the network. Please check your internet connection and try again later.'
       );
+    } catch (error) {
+      this.isConnecting = false;
+      console.error('Connection error:', error);
+      throw error;
+    }
+  }
+
+  private async cleanup(): Promise<void> {
+    try {
+      if (this.api) {
+        if (this.api.isConnected) {
+          await this.api.disconnect();
+        }
+        this.api = null;
+      }
+      if (this.provider) {
+        this.provider.disconnect();
+        this.provider = null;
+      }
+    } catch (error) {
+      console.warn('Error during cleanup:', error);
     }
   }
 
   private setupEventHandlers() {
     if (!this.api || !this.provider) return;
 
-    // Set up new handlers
-    this.provider.on('error', this.handleError);
-    this.provider.on('disconnected', this.handleDisconnect);
-    this.provider.on('connected', this.handleConnect);
-  }
+    this.provider.on('error', (error: Error) => {
+      console.error('WebSocket error:', error);
+      void this.reconnect();
+    });
 
-  private async handleConnectionError(error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    await securityLogger.logEvent({
-      type: SecurityEventType.API_ERROR,
-      timestamp: new Date().toISOString(),
-      details: {
-        error: errorMessage,
-        attempts: this.connectionAttempts
-      }
+    this.provider.on('disconnected', () => {
+      console.warn('WebSocket disconnected');
+      void this.reconnect();
+    });
+
+    this.provider.on('connected', () => {
+      console.log('WebSocket connected');
+      this.connectionAttempts = 0;
+    });
+
+    // Add specific API event handlers
+    this.api.on('ready', () => {
+      console.log('API is ready');
+    });
+
+    this.api.on('error', (error: Error) => {
+      console.error('API error:', error);
+      void this.reconnect();
     });
   }
 
-  private async reconnect() {
+  private async reconnect(): Promise<void> {
+    if (this.isConnecting) return;
+    
     try {
-      this.connectionAttempts++;
-      console.warn(`Attempting to reconnect (${this.connectionAttempts}/${this.maxConnectionAttempts})...`);
-      
-      // Clean up existing connection
-      await this.disconnect();
-      
-      // Create new provider
-      this.provider = new WsProvider(this.wsEndpoint);
-      
-      // Attempt reconnection
+      console.log('Attempting to reconnect...');
       await this.connect();
     } catch (error) {
       console.error('Reconnection failed:', error);
-      this.isConnecting = false;
+      // Try again after delay if not at max attempts
+      if (this.connectionAttempts < this.maxConnectionAttempts) {
+        setTimeout(() => void this.reconnect(), this.reconnectDelay);
+      }
     }
   }
 
   async disconnect(): Promise<void> {
-    try {
-      if (this.api) {
-        // Remove all event listeners first
-        this.api.off('disconnected', () => {});
-        this.api.off('connected', () => {});
-        this.api.off('error', () => {});
-        
-        // Then disconnect
-        await this.api.disconnect();
-        this.api = null;
-      }
-      if (this.provider) {
-        // Remove WebSocket event listeners by replacing them with empty functions
-        this.provider.on('error', () => {});
-        this.provider.on('disconnected', () => {});
-        this.provider.on('connected', () => {});
-        
-        // Then disconnect
-        await this.provider.disconnect();
-        this.provider = null;
-      }
-      this.connectionAttempts = 0;
-      this.isConnecting = false;
-    } catch (error) {
-      console.error('Error during disconnection:', error);
-      // Don't throw the error as we're cleaning up
-    }
+    await this.cleanup();
+    this.connectionAttempts = 0;
+    this.isConnecting = false;
   }
-
-  private handleError = async (error: Error) => {
-    console.error('WebSocket error:', error);
-    await securityLogger.logEvent({
-      type: SecurityEventType.API_ERROR,
-      timestamp: new Date().toISOString(),
-      details: {
-        error: error.message
-      }
-    });
-  };
-
-  private handleDisconnect = async () => {
-    console.warn('WebSocket disconnected');
-    await securityLogger.logEvent({
-      type: SecurityEventType.API_ERROR,
-      timestamp: new Date().toISOString(),
-      details: {
-        event: 'NETWORK_DISCONNECT'
-      }
-    });
-    void this.reconnect();
-  };
-
-  private handleConnect = () => {
-    console.log('WebSocket connected');
-  };
 
   async getApi(): Promise<ApiPromise> {
     if (!this.api || !this.api.isConnected) {
@@ -240,7 +255,7 @@ export class PolkadotService {
     if (!this.api) {
       throw new PolkadotHubError(
         'API not initialized',
-        'API_ERROR',
+        ErrorCodes.API.ERROR,
         'Failed to initialize Polkadot API'
       );
     }

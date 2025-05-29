@@ -1,16 +1,14 @@
 'use client';
 
-import { polkadotService } from './polkadot';
-import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
-import { websocketService } from './websocketService';
-import BN from 'bn.js';
-import type { AccountInfo, AccountId } from '@polkadot/types/interfaces';
-import type { StakingLedger } from '@polkadot/types/interfaces/staking';
-import type { Vec } from '@polkadot/types';
-import type { BalanceLock } from '@polkadot/types/interfaces/balances';
-import type { Option } from '@polkadot/types';
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import { formatBalance } from '@polkadot/util';
+import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
+import polkadotApiService from './polkadotApiService';
+import { websocketService } from './websocketService';
+import BN from 'bn.js';
+import type { AccountId } from '@polkadot/types/interfaces';
+import type { Vec } from '@polkadot/types';
+import type { BalanceLock } from '@polkadot/types/interfaces/balances';
 
 export interface PortfolioBalance {
   total: string;
@@ -100,6 +98,13 @@ export interface Validator {
   active: boolean;
 }
 
+interface StakingLedgerType {
+  active: { toString: () => string };
+  unlocking: Array<{
+    value: { toString: () => string };
+  }>;
+}
+
 class PortfolioService {
   private static instance: PortfolioService;
   private api: ApiPromise | null = null;
@@ -121,42 +126,122 @@ class PortfolioService {
 
   async getBalance(address: string): Promise<PortfolioBalance> {
     try {
-      const api = await polkadotService.getApi();
-      if (!api?.query?.system?.account || !api?.query?.staking?.ledger || !api?.query?.balances?.locks) {
+      const api = await polkadotApiService.getApi();
+      
+      // Check if API is available
+      if (!api) {
         throw new PolkadotHubError(
           'API not ready',
           ErrorCodes.API.ERROR,
-          'API methods not available'
+          'API not initialized. Please try again in a few moments.'
         );
       }
 
-      const [accountData, stakingInfo, locks] = await Promise.all([
-        api.query.system.account<AccountInfo>(address),
-        api.query.staking.ledger<Option<StakingLedger>>(address),
-        api.query.balances.locks<Vec<BalanceLock>>(address)
-      ]);
+      // Check required queries with proper type handling
+      const systemAccount = api.query?.system?.account;
+      const stakingLedger = api.query?.staking?.ledger;
+      const balanceLocks = api.query?.balances?.locks;
 
-      const { free, reserved, miscFrozen, feeFrozen } = (accountData as any).data;
+      if (!systemAccount || !stakingLedger || !balanceLocks) {
+        throw new PolkadotHubError(
+          'API not ready',
+          ErrorCodes.API.ERROR,
+          'Required API methods not available'
+        );
+      }
+
+      // Fetch account data with proper error handling
+      let accountData, stakingInfo, locks;
+      try {
+        [accountData, stakingInfo, locks] = await Promise.all([
+          systemAccount(address),
+          stakingLedger(address),
+          balanceLocks(address)
+        ]);
+      } catch (error) {
+        console.error('Failed to fetch account data:', error);
+        throw new PolkadotHubError(
+          'Failed to fetch account data',
+          ErrorCodes.API.REQUEST_FAILED,
+          'Could not retrieve account information'
+        );
+      }
+
+      // Safely extract account data with type checking
+      if (!accountData || typeof accountData !== 'object') {
+        throw new PolkadotHubError(
+          'Invalid account data',
+          ErrorCodes.API.ERROR,
+          'Received invalid account data format'
+        );
+      }
+
+      const accountInfo = (accountData as any).data;
+      if (!accountInfo || typeof accountInfo !== 'object') {
+        throw new PolkadotHubError(
+          'Invalid account info',
+          ErrorCodes.API.ERROR,
+          'Account data is in unexpected format'
+        );
+      }
+
+      // Safely extract balance information
+      const free = new BN(accountInfo.free?.toString() || '0');
+      const reserved = new BN(accountInfo.reserved?.toString() || '0');
+      const miscFrozen = new BN(accountInfo.miscFrozen?.toString() || '0');
+      const feeFrozen = new BN(accountInfo.feeFrozen?.toString() || '0');
+
       const totalLocked = new BN(Math.max(
         miscFrozen.toNumber(),
         feeFrozen.toNumber()
       ));
 
-      const stakingLedger = stakingInfo.unwrapOr(null);
-      const bondedBalance = stakingLedger ? new BN(stakingLedger.active.toString()) : new BN(0);
-      const unbondingBalance = stakingLedger ? 
-        stakingLedger.unlocking.reduce((total: BN, chunk: any) => {
-          return total.add(new BN(chunk.value.toString()));
-        }, new BN(0)) : new BN(0);
+      // Safely process staking information
+      let bondedBalance = new BN(0);
+      let unbondingBalance = new BN(0);
 
-      // Parse different types of locks
-      const democracyLock = locks.find(lock => lock.id.toString() === 'democrac');
-      const vestingLock = locks.find(lock => lock.id.toString() === 'vesting');
-      const governanceLock = locks.find(lock => lock.id.toString() === 'governan');
+      try {
+        // Cast to Option<StakingLedger> type with proper typing
+        const stakingLedgerOption = stakingInfo as unknown as { unwrapOr: <T>(defaultValue: T) => T };
+        const stakingLedger = stakingLedgerOption.unwrapOr<StakingLedgerType | null>(null);
+        
+        if (stakingLedger) {
+          bondedBalance = new BN(stakingLedger.active?.toString() || '0');
+          unbondingBalance = stakingLedger.unlocking?.reduce((total: BN, chunk) => {
+            return total.add(new BN(chunk.value?.toString() || '0'));
+          }, new BN(0)) || new BN(0);
+        }
+      } catch (error) {
+        console.warn('Failed to process staking info:', error);
+      }
 
-      const democracyLocked = democracyLock ? new BN(democracyLock.amount.toString()) : new BN(0);
-      const vestingLocked = vestingLock ? new BN(vestingLock.amount.toString()) : new BN(0);
-      const governanceLocked = governanceLock ? new BN(governanceLock.amount.toString()) : new BN(0);
+      // Safely process locks
+      let democracyLocked = new BN(0);
+      let vestingLocked = new BN(0);
+      let governanceLocked = new BN(0);
+
+      try {
+        const locksArray = (locks as any)?.toArray() || [];
+        
+        for (const lock of locksArray) {
+          const id = lock.id?.toString();
+          const amount = new BN(lock.amount?.toString() || '0');
+
+          switch (id) {
+            case 'democrac':
+              democracyLocked = amount;
+              break;
+            case 'vesting':
+              vestingLocked = amount;
+              break;
+            case 'governan':
+              governanceLocked = amount;
+              break;
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to process locks:', error);
+      }
 
       return {
         total: free.add(reserved).toString(),
@@ -174,6 +259,10 @@ class PortfolioService {
         redeemable: '0' // TODO: Calculate redeemable amount
       };
     } catch (error) {
+      console.error('Failed to fetch balance:', error);
+      if (error instanceof PolkadotHubError) {
+        throw error;
+      }
       throw new PolkadotHubError(
         'Failed to fetch balance',
         ErrorCodes.API.REQUEST_FAILED,
@@ -197,7 +286,7 @@ class PortfolioService {
 
   async getTransactions(address: string): Promise<Transaction[]> {
     try {
-      const api = await polkadotService.getApi();
+      const api = await polkadotApiService.getApi();
       if (!api?.query?.system?.events) {
         throw new PolkadotHubError(
           'API not initialized',
@@ -250,29 +339,64 @@ class PortfolioService {
 
   async getPortfolioStats(address: string): Promise<PortfolioStats> {
     try {
-      const balance = await this.getBalance(address);
+      // Get balance with fallback to default values if it fails
+      let balance: PortfolioBalance;
+      try {
+        balance = await this.getBalance(address);
+      } catch (error) {
+        console.warn('Failed to fetch balance, using default values:', error);
+        balance = {
+          total: '0',
+          available: '0',
+          transferable: '0',
+          locked: {
+            total: '0',
+            staking: '0',
+            democracy: '0',
+            vesting: '0',
+            governance: '0'
+          },
+          bonded: '0',
+          unbonding: '0',
+          redeemable: '0'
+        };
+      }
       
-      // Convert string balances to BigInt for calculations
-      const relayChainTotal = BigInt(balance.total || 0);
+      // Safely convert string balances to BigInt with error handling
+      const toBigInt = (value: string | undefined | null): bigint => {
+        try {
+          return BigInt(value || '0');
+        } catch {
+          return BigInt(0);
+        }
+      };
+
+      const relayChainTotal = toBigInt(balance.total);
       const assetHubTotal = BigInt(0); // TODO: Implement actual Asset Hub balance
       const parachainsTotal = BigInt(0); // TODO: Implement actual parachain balances
       
       const totalValue = relayChainTotal + assetHubTotal + parachainsTotal;
       
-      // Calculate percentages
-      const relayChainPercentage = totalValue === BigInt(0) ? 0 :
-        Number((BigInt(100) * relayChainTotal) / totalValue);
-      const assetHubPercentage = totalValue === BigInt(0) ? 0 :
-        Number((BigInt(100) * assetHubTotal) / totalValue);
-      const parachainsPercentage = totalValue === BigInt(0) ? 0 :
-        Number((BigInt(100) * parachainsTotal) / totalValue);
+      // Calculate percentages with safe division
+      const calculatePercentage = (part: bigint): number => {
+        if (totalValue === BigInt(0)) return 0;
+        try {
+          return Number((BigInt(100) * part) / totalValue);
+        } catch {
+          return 0;
+        }
+      };
+
+      const relayChainPercentage = calculatePercentage(relayChainTotal);
+      const assetHubPercentage = calculatePercentage(assetHubTotal);
+      const parachainsPercentage = calculatePercentage(parachainsTotal);
 
       // Mock 24h change data for now
       // TODO: Implement real price change tracking
       const mockChange = Math.random() * 10 - 5; // Random number between -5 and 5
 
       return {
-        totalBalance: balance.total,
+        totalBalance: balance.total || '0',
         change24h: mockChange,
         changePercentage24h: mockChange,
         distribution: {
@@ -281,25 +405,39 @@ class PortfolioService {
           parachains: parachainsPercentage
         },
         balanceDetails: {
-          available: balance.available,
-          locked: balance.locked.total,
-          bonded: balance.bonded,
-          unbonding: balance.unbonding,
-          democracy: balance.locked.democracy
+          available: balance.available || '0',
+          locked: balance.locked?.total || '0',
+          bonded: balance.bonded || '0',
+          unbonding: balance.unbonding || '0',
+          democracy: balance.locked?.democracy || '0'
         }
       };
     } catch (error) {
-      throw new PolkadotHubError(
-        'Failed to fetch portfolio stats',
-        ErrorCodes.API.REQUEST_FAILED,
-        'Could not load portfolio statistics. Please try again.'
-      );
+      console.error('Failed to fetch portfolio stats:', error);
+      // Return safe default values instead of throwing
+      return {
+        totalBalance: '0',
+        change24h: 0,
+        changePercentage24h: 0,
+        distribution: {
+          relayChain: 0,
+          assetHub: 0,
+          parachains: 0
+        },
+        balanceDetails: {
+          available: '0',
+          locked: '0',
+          bonded: '0',
+          unbonding: '0',
+          democracy: '0'
+        }
+      };
     }
   }
 
   async getMultiChainBalances(address: string): Promise<CrossChainBalance[]> {
     try {
-      const api = await polkadotService.getApi();
+      const api = await polkadotApiService.getApi();
       if (!api) {
         throw new PolkadotHubError(
           'API not ready',

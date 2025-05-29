@@ -1,10 +1,17 @@
 import { Metric, onCLS, onFCP, onLCP, onTTFB } from 'web-vitals';
 import { loggingService } from './loggingService';
 
+// Type definition for Google Analytics gtag
+interface GTagFunction {
+  (command: 'config', targetId: string, config?: object): void;
+  (command: 'event', action: string, params?: object): void;
+  (command: 'js', date: Date): void;
+  (command: string, action: string, params: any): void;
+}
+
+// Extend the Window interface
 declare global {
-  interface Window {
-    gtag?: (command: string, action: string, params: any) => void;
-  }
+  var gtag: GTagFunction | undefined;
 }
 
 class PerformanceService {
@@ -114,6 +121,63 @@ class PerformanceService {
   clearMeasures() {
     if (typeof window === 'undefined') return;
     performance.clearMeasures();
+  }
+
+  trackEvent(category: string, action: string, label?: string, value?: number): void {
+    try {
+      if (typeof gtag !== 'undefined') {
+        gtag('event', action, {
+          event_category: category,
+          event_label: label,
+          value: value
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to track event:', error);
+    }
+  }
+
+  trackPageView(path: string): void {
+    try {
+      if (typeof gtag !== 'undefined') {
+        gtag('config', process.env.NEXT_PUBLIC_GA_ID || '', {
+          page_path: path
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to track page view:', error);
+    }
+  }
+
+  trackError(error: Error, context?: string): void {
+    try {
+      if (typeof gtag !== 'undefined') {
+        gtag('event', 'error', {
+          event_category: 'Error',
+          event_label: context || 'Unknown',
+          error_name: error.name,
+          error_message: error.message,
+          error_stack: error.stack
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to track error:', error);
+    }
+  }
+
+  trackTiming(category: string, variable: string, value: number, label?: string): void {
+    try {
+      if (typeof gtag !== 'undefined') {
+        gtag('event', 'timing_complete', {
+          event_category: category,
+          name: variable,
+          value: value,
+          event_label: label
+        });
+      }
+    } catch (error) {
+      console.warn('Failed to track timing:', error);
+    }
   }
 }
 

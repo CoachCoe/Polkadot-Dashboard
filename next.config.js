@@ -7,8 +7,6 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['@polkadot/api', '@polkadot/extension-dapp'],
   },
-  output: 'export',
-  distDir: 'out',
   webpack: (config, { isServer }) => {
     if (!isServer) {
       config.resolve.fallback = {
@@ -58,7 +56,6 @@ const nextConfig = {
     return config;
   },
   images: {
-    unoptimized: true,
     domains: ['raw.githubusercontent.com'],
     remotePatterns: [
       {

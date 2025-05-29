@@ -2,6 +2,18 @@
 
 import { Project, ProjectFilter, ProjectSortOptions, ProjectCategory, CategoryInfo } from '@/types/ecosystem';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
+import {
+  CurrencyDollarIcon,
+  PhotoIcon,
+  ServerStackIcon,
+  CommandLineIcon,
+  PuzzlePieceIcon,
+  UserGroupIcon,
+  BuildingLibraryIcon,
+  LockClosedIcon,
+  FingerPrintIcon,
+  Square3Stack3DIcon
+} from '@heroicons/react/24/outline';
 
 class EcosystemService {
   private static instance: EcosystemService;
@@ -194,70 +206,70 @@ class EcosystemService {
           id: 'defi',
           name: 'DeFi',
           description: 'Decentralized Finance applications and protocols',
-          icon: '/images/categories/defi.svg',
+          icon: CurrencyDollarIcon,
           count: categoryMap.get('defi') || 0
         },
         {
           id: 'nft',
-          name: 'NFTs',
-          description: 'Non-Fungible Token platforms and marketplaces',
-          icon: '/images/categories/nft.svg',
+          name: 'NFTs & Gaming',
+          description: 'NFT marketplaces, games, and collectibles',
+          icon: PhotoIcon,
           count: categoryMap.get('nft') || 0
         },
         {
           id: 'infrastructure',
           name: 'Infrastructure',
           description: 'Core blockchain infrastructure and protocols',
-          icon: '/images/categories/infrastructure.svg',
+          icon: ServerStackIcon,
           count: categoryMap.get('infrastructure') || 0
         },
         {
           id: 'developer-tools',
           name: 'Developer Tools',
           description: 'Tools and services for blockchain developers',
-          icon: '/images/categories/developer-tools.svg',
+          icon: CommandLineIcon,
           count: categoryMap.get('developer-tools') || 0
         },
         {
           id: 'gaming',
           name: 'Gaming',
           description: 'Blockchain gaming and GameFi projects',
-          icon: '/images/categories/gaming.svg',
+          icon: PuzzlePieceIcon,
           count: categoryMap.get('gaming') || 0
         },
         {
           id: 'social',
           name: 'Social',
           description: 'Social networks and communication platforms',
-          icon: '/images/categories/social.svg',
+          icon: UserGroupIcon,
           count: categoryMap.get('social') || 0
         },
         {
           id: 'dao',
           name: 'DAO',
           description: 'Decentralized Autonomous Organizations',
-          icon: '/images/categories/dao.svg',
+          icon: BuildingLibraryIcon,
           count: categoryMap.get('dao') || 0
         },
         {
           id: 'privacy',
           name: 'Privacy',
           description: 'Privacy-focused solutions and protocols',
-          icon: '/images/categories/privacy.svg',
+          icon: LockClosedIcon,
           count: categoryMap.get('privacy') || 0
         },
         {
           id: 'identity',
           name: 'Identity',
           description: 'Identity and authentication solutions',
-          icon: '/images/categories/identity.svg',
+          icon: FingerPrintIcon,
           count: categoryMap.get('identity') || 0
         },
         {
           id: 'other',
           name: 'Other',
           description: 'Other blockchain projects and services',
-          icon: '/images/categories/other.svg',
+          icon: Square3Stack3DIcon,
           count: categoryMap.get('other') || 0
         }
       ];

@@ -2,9 +2,10 @@
 
 import React, { useState, useEffect } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
-import { governanceService, type DelegationInfo, type Track } from '@/services/governanceService';
+import { governanceService, type DelegationInfo, type Track } from '@/services/governance';
 import { Card } from '@/components/ui/Card';
 import { Button } from '@/components/ui/Button';
+import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { ArrowPathIcon } from '@heroicons/react/24/outline';
 
 interface DelegationProps {
@@ -55,11 +56,11 @@ export function Delegation({ className }: DelegationProps) {
     try {
       setError(null);
       await governanceService.delegate(
-        selectedAccount.address,
-        targetAddress,
         selectedTrack,
+        targetAddress,
         amount,
-        conviction
+        conviction,
+        selectedAccount.address
       );
       void loadData();
       // Reset form
@@ -72,17 +73,35 @@ export function Delegation({ className }: DelegationProps) {
     }
   };
 
-  const handleUndelegate = async (track: number) => {
+  const handleUndelegate = async (trackId: number) => {
     if (!selectedAccount) return;
 
     try {
       setError(null);
-      await governanceService.undelegate(selectedAccount.address, track);
+      await governanceService.undelegate(trackId, selectedAccount.address);
       void loadData();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to undelegate votes');
     }
   };
+
+  if (!selectedAccount) {
+    return (
+      <Card className="p-6">
+        <p className="text-center text-gray-600">
+          Please connect your wallet to manage vote delegations.
+        </p>
+      </Card>
+    );
+  }
+
+  if (isLoading) {
+    return (
+      <Card className="p-6">
+        <LoadingSpinner className="w-8 h-8 mx-auto" />
+      </Card>
+    );
+  }
 
   return (
     <div className={className}>
@@ -120,7 +139,7 @@ export function Delegation({ className }: DelegationProps) {
               <option value="">Select a track</option>
               {tracks.map((track) => (
                 <option key={track.id} value={track.id}>
-                  {track.name} - Min. Deposit: {track.minDeposit} DOT
+                  {track.name} - Min. Deposit: {track.minDeposit}
                 </option>
               ))}
             </select>
@@ -147,6 +166,8 @@ export function Delegation({ className }: DelegationProps) {
               onChange={(e) => setAmount(e.target.value)}
               className="w-full px-3 py-2 border rounded-md"
               placeholder="0.0"
+              min="0"
+              step="0.1"
             />
           </div>
           <div>
@@ -168,7 +189,7 @@ export function Delegation({ className }: DelegationProps) {
         </div>
         <Button
           onClick={() => void handleDelegate()}
-          className="w-full bg-pink-600 hover:bg-pink-700 text-white"
+          className="w-full"
           disabled={!selectedTrack || !targetAddress || !amount || isLoading}
         >
           Delegate Votes
@@ -177,40 +198,42 @@ export function Delegation({ className }: DelegationProps) {
 
       <div className="space-y-4">
         <h3 className="text-lg font-medium">Active Delegations</h3>
-        {delegations.map((delegation) => {
-          const track = tracks.find((t) => t.id === delegation.track);
-          return (
-            <Card key={`${delegation.track}-${delegation.target}`} className="p-6">
-              <div className="flex justify-between items-start">
-                <div>
-                  <h4 className="font-medium">
-                    {track?.name || `Track ${delegation.track}`}
-                  </h4>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Delegated to: {delegation.target.slice(0, 6)}...
-                    {delegation.target.slice(-4)}
-                  </p>
-                  <p className="text-sm text-gray-500">
-                    Amount: {delegation.balance} DOT
-                  </p>
+        {delegations.length === 0 ? (
+          <Card className="p-6">
+            <p className="text-center text-gray-600">No active delegations found.</p>
+          </Card>
+        ) : (
+          delegations.map((delegation) => {
+            const track = tracks.find((t) => t.id === delegation.trackId);
+            return (
+              <Card key={`${delegation.trackId}-${delegation.target}`} className="p-6">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h4 className="font-medium">
+                      {track?.name || `Track ${delegation.trackId}`}
+                    </h4>
+                    <p className="text-sm text-gray-500 mt-1">
+                      Delegated to: {delegation.target.slice(0, 6)}...
+                      {delegation.target.slice(-4)}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Amount: {delegation.amount}
+                    </p>
+                    <p className="text-sm text-gray-500">
+                      Conviction: {delegation.conviction}x
+                    </p>
+                  </div>
+                  <Button
+                    onClick={() => void handleUndelegate(delegation.trackId)}
+                    variant="outline"
+                    className="text-red-600 hover:text-red-700"
+                  >
+                    Undelegate
+                  </Button>
                 </div>
-                <Button
-                  onClick={() => void handleUndelegate(delegation.track)}
-                  variant="outline"
-                  className="text-red-600 hover:text-red-700"
-                  disabled={isLoading}
-                >
-                  Undelegate
-                </Button>
-              </div>
-            </Card>
-          );
-        })}
-
-        {delegations.length === 0 && !isLoading && (
-          <div className="text-center py-12 text-gray-500">
-            No active delegations
-          </div>
+              </Card>
+            )
+          })
         )}
       </div>
     </div>

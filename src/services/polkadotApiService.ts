@@ -2,7 +2,6 @@ import { ApiPromise, WsProvider } from '@polkadot/api';
 import type { SubmittableExtrinsic } from '@polkadot/api/types';
 import { formatBalance, BN } from '@polkadot/util';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
-import { securityLogger, SecurityEventType } from '@/utils/securityLogger';
 import type { WalletAccount } from '@/services/walletService';
 import { web3Enable, web3Accounts } from '@polkadot/extension-dapp';
 import type { 
@@ -10,25 +9,24 @@ import type {
   StakingInfo, 
   ChainInfo, 
   NominatorInfo, 
-  TransactionStatus, 
-  ValidatorIdentity 
+  TransactionStatus,
+  ValidatorExposure
 } from '@/types/staking';
 import type { 
   Referendum, 
   Track, 
   DelegationInfo 
 } from '@/types/governance';
-import { InjectedAccount } from '@polkadot/extension-inject/types';
+import type { InjectedAccount } from '@polkadot/extension-inject/types';
+import type { AccountId } from '@polkadot/types/interfaces';
 
 // Helper types for runtime type checking
 type StakingModule = NonNullable<ApiPromise['query']['staking']>;
 type StakingQueries = {
   validators: NonNullable<StakingModule['validators']>;
   validatorPrefs: NonNullable<StakingModule['validatorPrefs']>;
-  erasStakers: NonNullable<StakingModule['erasStakers']>;
   activeEra: NonNullable<StakingModule['activeEra']>;
   erasStakersPayout: NonNullable<StakingModule['erasStakersPayout']>;
-  erasValidatorReward: NonNullable<StakingModule['erasValidatorReward']>;
 };
 
 // Add consistent logging with warning suppression for known issues
@@ -92,6 +90,10 @@ class PolkadotApiService {
     return PolkadotApiService.instance;
   }
 
+  async getApi(): Promise<ApiPromise> {
+    return this.ensureApi();
+  }
+
   private async ensureApi(): Promise<ApiPromise> {
     if (!this.api) {
       const provider = new WsProvider(this.wsEndpoint);
@@ -115,185 +117,125 @@ class PolkadotApiService {
       this.api = await ApiPromise.create({
         provider,
         noInitWarn: true,
-        throwOnConnect: false,
+        throwOnConnect: true,
         throwOnUnknown: false,
         types: {
           // Add custom type definitions if needed
-        },
-        rpc: {
-          archive: {
-            body: {
-              description: 'Get block body',
-              params: [{ name: 'hash', type: 'Hash' }],
-              type: 'Vec<Extrinsic>'
-            },
-            call: {
-              description: 'Get runtime call',
-              params: [{ name: 'hash', type: 'Hash' }],
-              type: 'Call'
-            },
-            finalizedHeight: {
-              description: 'Get finalized height',
-              params: [],
-              type: 'BlockNumber'
-            },
-            genesisHash: {
-              description: 'Get genesis hash',
-              params: [],
-              type: 'Hash'
-            },
-            hashByHeight: {
-              description: 'Get block hash by height',
-              params: [{ name: 'height', type: 'BlockNumber' }],
-              type: 'Hash'
-            },
-            header: {
-              description: 'Get block header',
-              params: [{ name: 'hash', type: 'Hash' }],
-              type: 'Header'
-            },
-            storage: {
-              description: 'Get storage',
-              params: [{ name: 'key', type: 'StorageKey' }],
-              type: 'StorageData'
-            }
-          },
-          chainHead: {
-            body: {
-              description: 'Get block body',
-              params: [{ name: 'hash', type: 'Hash' }],
-              type: 'Vec<Extrinsic>'
-            },
-            call: {
-              description: 'Get runtime call',
-              params: [{ name: 'hash', type: 'Hash' }],
-              type: 'Call'
-            },
-            header: {
-              description: 'Get block header',
-              params: [{ name: 'hash', type: 'Hash' }],
-              type: 'Header'
-            },
-            storage: {
-              description: 'Get storage',
-              params: [{ name: 'key', type: 'StorageKey' }],
-              type: 'StorageData'
-            }
-          },
-          chainSpec: {
-            chainName: {
-              description: 'Get chain name',
-              params: [],
-              type: 'Text'
-            },
-            genesisHash: {
-              description: 'Get genesis hash',
-              params: [],
-              type: 'Hash'
-            },
-            properties: {
-              description: 'Get chain properties',
-              params: [],
-              type: 'ChainProperties'
-            }
-          },
-          transactionWatch: {
-            submitAndWatch: {
-              description: 'Submit and watch transaction',
-              params: [{ name: 'tx', type: 'Bytes' }],
-              type: 'Hash'
-            },
-            unwatch: {
-              description: 'Unwatch transaction',
-              params: [{ name: 'hash', type: 'Hash' }],
-              type: 'Bool'
-            }
-          },
-          transaction: {
-            broadcast: {
-              description: 'Broadcast transaction',
-              params: [{ name: 'tx', type: 'Bytes' }],
-              type: 'Hash'
-            }
-          }
         }
       });
 
-      // Set up connection monitoring with improved error handling
-      this.api.on('connected', () => {
-        log.info('Connected to Polkadot network');
-        this.reconnectAttempts = 0;
-        this.handleConnectionEvent('connected');
-      });
-
-      this.api.on('disconnected', () => {
-        log.warn('Disconnected from Polkadot network');
-        this.handleConnectionEvent('disconnected');
-        this.attemptReconnect();
-      });
-
-      this.api.on('error', (error: Error) => {
-        // Filter out known non-critical errors
-        if (
-          error.message.includes('RPC methods not decorated') ||
-          error.message.includes('Not decorating runtime apis') ||
-          error.message.includes('unknown runtime apis')
-        ) {
-          log.debug('Non-critical API error:', error.message);
-          return;
-        }
-        log.error('Polkadot network error:', error);
-        this.handleConnectionEvent('error', error);
-      });
-
+      // Wait for API to be ready and connected
       await this.api.isReady;
+
+      // Verify required modules and queries are available
+      const stakingModule = this.api.query.staking;
+      if (!stakingModule) {
+        log.error('Staking module not available');
+        throw new PolkadotHubError(
+          'Staking module not available',
+          ErrorCodes.API.ERROR,
+          'The staking module is not available on this chain'
+        );
+      }
+
+      // Log all available staking queries for debugging
+      const availableQueries = Object.keys(stakingModule).join(', ');
+      log.debug(`Available staking queries: ${availableQueries}`);
+
+      // Split queries into required and optional
+      const requiredQueries = [
+        'validators',
+        'validatorPrefs',
+        'activeEra'
+      ];
+
+      const optionalQueries = [
+        'erasStakers',
+        'erasStakersPayout',
+        'erasValidatorReward'
+      ];
+
+      // Check required queries
+      const missingRequiredQueries = requiredQueries.filter(query => !stakingModule[query]);
+      if (missingRequiredQueries.length > 0) {
+        log.error(`Missing required staking queries: ${missingRequiredQueries.join(', ')}`);
+        throw new PolkadotHubError(
+          'Required staking queries not available',
+          ErrorCodes.API.ERROR,
+          `Missing required staking queries: ${missingRequiredQueries.join(', ')}`
+        );
+      }
+
+      // Log optional queries status
+      const missingOptionalQueries = optionalQueries.filter(query => !stakingModule[query]);
+      if (missingOptionalQueries.length > 0) {
+        log.warn(`Missing optional staking queries: ${missingOptionalQueries.join(', ')}`);
+      }
+
+      // Initialize chain info
       await this.initializeChainInfo();
 
-      log.performance('Network connection', startTime);
+      log.performance('API connection and initialization', startTime);
       return this.api;
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
       log.error('Failed to connect to Polkadot network:', error);
+      if (this.reconnectAttempts < this.maxReconnectAttempts) {
+        this.reconnectAttempts++;
+        log.info(`Attempting to reconnect (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+        await new Promise(resolve => setTimeout(resolve, this.reconnectDelay));
+        return this.connect();
+      }
       throw new PolkadotHubError(
-        errorMessage,
-        ErrorCodes.API.ERROR,
-        'Failed to connect to Polkadot network'
+        'Failed to connect to Polkadot network',
+        ErrorCodes.API.NETWORK_ERROR,
+        'Please check your internet connection and try again'
       );
     }
   }
 
-  private async attemptReconnect(): Promise<void> {
-    if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-      log.error(`Max reconnection attempts (${this.maxReconnectAttempts}) reached`);
-      return;
+  private getStakingModule(api: ApiPromise): StakingQueries {
+    if (!api?.query?.staking) {
+      throw new PolkadotHubError(
+        'Staking module not available',
+        ErrorCodes.API.ERROR,
+        'The staking module is not available on this chain'
+      );
     }
 
-    this.reconnectAttempts++;
-    log.info(`Attempting to reconnect (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})...`);
+    const stakingModule = api.query.staking;
+    
+    // Log available queries for debugging
+    const availableQueries = Object.keys(stakingModule).join(', ');
+    log.debug(`Available staking queries: ${availableQueries}`);
 
-    setTimeout(async () => {
-      try {
-        await this.connect();
-      } catch (error) {
-        log.error('Reconnection attempt failed:', error);
-      }
-    }, this.reconnectDelay);
-  }
-
-  private async handleConnectionEvent(status: 'connected' | 'disconnected' | 'error', error?: Error) {
-    await securityLogger.logEvent({
-      type: SecurityEventType.API_ERROR,
-      timestamp: new Date().toISOString(),
-      details: {
-        event: 'NETWORK_STATUS',
-        status,
-        error: error?.message
-      }
-    });
-
-    if (status === 'disconnected') {
-      setTimeout(() => this.connect(), 5000);
+    // Create base query to use as fallback
+    const baseQuery = stakingModule.validators;
+    if (!baseQuery) {
+      throw new PolkadotHubError(
+        'Base staking query not available',
+        ErrorCodes.API.ERROR,
+        'Required staking functionality is not available'
+      );
     }
+
+    // Initialize queries with proper type assertions and fallbacks
+    const queries: StakingQueries = {
+      validators: baseQuery,
+      validatorPrefs: stakingModule.validatorPrefs || baseQuery,
+      activeEra: stakingModule.activeEra || baseQuery,
+      erasStakersPayout: stakingModule.erasStakersPayout || baseQuery
+    };
+
+    // Log which queries are using fallbacks
+    const usingFallbacks = Object.entries(queries)
+      .filter(([key, value]) => value === baseQuery && key !== 'validators')
+      .map(([key]) => key);
+    
+    if (usingFallbacks.length > 0) {
+      log.warn(`Using fallback for queries: ${usingFallbacks.join(', ')}`);
+    }
+
+    return queries;
   }
 
   private async initializeChainInfo(): Promise<void> {
@@ -449,50 +391,6 @@ class PolkadotApiService {
     }
   }
 
-  private getStakingModule(api: ApiPromise): StakingQueries {
-    if (!api.query.staking) {
-      throw new PolkadotHubError(
-        'Staking module not available',
-        ErrorCodes.API.ERROR,
-        'Please try again in a few moments.'
-      );
-    }
-
-    const stakingModule = api.query.staking;
-    
-    // Log available queries for debugging
-    const availableQueries = Object.keys(stakingModule).join(', ');
-    log.debug(`Available staking queries: ${availableQueries}`);
-
-    // Create a base query to use as fallback
-    const baseQuery = stakingModule.validators;
-    if (!baseQuery) {
-      throw new PolkadotHubError(
-        'Base staking query not available',
-        ErrorCodes.API.ERROR,
-        'Required staking functionality is not available'
-      );
-    }
-
-    // Initialize queries with proper type assertions
-    const queries: StakingQueries = {
-      validators: baseQuery,
-      validatorPrefs: (stakingModule.validatorPreferences || stakingModule.validatorPrefs || baseQuery) as StakingQueries['validatorPrefs'],
-      erasStakers: (stakingModule.erasStakers || stakingModule.erasStakersClipped || baseQuery) as StakingQueries['erasStakers'],
-      activeEra: (stakingModule.activeEra || baseQuery) as StakingQueries['activeEra'],
-      erasStakersPayout: (stakingModule.erasStakersPayout || stakingModule.erasRewardPoints || baseQuery) as StakingQueries['erasStakersPayout'],
-      erasValidatorReward: (stakingModule.erasValidatorReward || baseQuery) as StakingQueries['erasValidatorReward']
-    };
-
-    // Log which queries are using fallbacks
-    const usingFallbacks = Object.entries(queries).filter(([, value]) => value === baseQuery);
-    if (usingFallbacks.length > 0) {
-      log.warn(`Using fallback for queries: ${usingFallbacks.map(([key]) => key).join(', ')}`);
-    }
-
-    return queries;
-  }
-
   async getStakingInfo(): Promise<StakingInfo> {
     try {
       const api = await this.ensureApi();
@@ -507,6 +405,13 @@ class PolkadotApiService {
           const unwrapped = (activeEraOpt as any).unwrapOrDefault();
           eraIndex = unwrapped.index.toNumber();
           activeEra = eraIndex;
+        } else {
+          // Fallback: try to get current era from system
+          const currentEra = await api.query.staking?.currentEra?.();
+          if (currentEra) {
+            activeEra = (currentEra as any).unwrapOrDefault().toNumber();
+            eraIndex = activeEra;
+          }
         }
       } catch (error) {
         log.warn('Failed to get active era:', error);
@@ -517,6 +422,21 @@ class PolkadotApiService {
       try {
         if (api.query.staking?.erasTotalStake) {
           const total = await api.query.staking.erasTotalStake(eraIndex);
+          totalStaked = total.toString();
+        } else {
+          // Alternative: sum up all validator stakes
+          const validators = await stakingModule.validators.entries();
+          let total = new BN(0);
+          for (const [, validatorPrefs] of validators) {
+            try {
+              const exposure = await api.query.staking?.erasStakersClipped?.(eraIndex, validatorPrefs);
+              if (exposure && (exposure as any).total) {
+                total = total.add((exposure as any).total);
+              }
+            } catch (error) {
+              log.warn('Failed to get validator exposure:', error);
+            }
+          }
           totalStaked = total.toString();
         }
       } catch (error) {
@@ -529,6 +449,10 @@ class PolkadotApiService {
         if (api.query.staking?.validatorCount) {
           const count = await api.query.staking.validatorCount();
           validatorCount = (count as any).toNumber();
+        } else {
+          // Alternative: count validators directly
+          const validators = await stakingModule.validators.entries();
+          validatorCount = validators.length;
         }
       } catch (error) {
         log.warn('Failed to get validator count:', error);
@@ -540,6 +464,8 @@ class PolkadotApiService {
         if (api.query.staking?.minNominatorBond) {
           const minBond = await api.query.staking.minNominatorBond();
           minimumStake = minBond.toString();
+        } else if (api.consts.staking?.minNominatorBond) {
+          minimumStake = api.consts.staking.minNominatorBond.toString();
         }
       } catch (error) {
         log.warn('Failed to get minimum stake:', error);
@@ -548,14 +474,12 @@ class PolkadotApiService {
       // Get reward rate with fallback
       let rewardRate = '0';
       try {
-        if (api.query.staking?.erasValidatorReward && api.query.balances?.totalIssuance) {
-          const [erasValidatorReward, totalIssuance] = await Promise.all([
-            api.query.staking.erasValidatorReward(eraIndex - 1),
-            api.query.balances.totalIssuance()
-          ]);
-
-          if (erasValidatorReward && totalIssuance) {
-            const reward = (erasValidatorReward as any).unwrapOrDefault();
+        if (api.query.balances?.totalIssuance) {
+          const totalIssuance = await api.query.balances.totalIssuance();
+          const lastEraReward = await api.query.staking?.erasRewardPoints?.(eraIndex - 1);
+          
+          if (lastEraReward && totalIssuance) {
+            const reward = (lastEraReward as any).total || new BN(0);
             const rate = reward
               .mul(new BN(100))
               .div(totalIssuance)
@@ -567,7 +491,7 @@ class PolkadotApiService {
         log.warn('Failed to calculate reward rate:', error);
       }
 
-      return {
+      const stakingInfo = {
         totalStaked,
         activeValidators: validatorCount,
         minimumStake,
@@ -575,6 +499,9 @@ class PolkadotApiService {
         rewardRate,
         stakingEnabled: true
       };
+
+      log.debug('Staking info:', stakingInfo);
+      return stakingInfo;
     } catch (error) {
       log.error('Failed to fetch staking info:', error);
       return {
@@ -590,76 +517,88 @@ class PolkadotApiService {
 
   async getValidators(): Promise<ValidatorInfo[]> {
     const api = await this.ensureApi();
-    const stakingModule = this.getStakingModule(api);
 
     try {
-      const validators = await stakingModule.validators.entries();
-      const validatorInfos = await Promise.all(
-        validators.map(async ([key, _]) => {
-          try {
-            // Runtime check for key structure
-            if (!key?.args?.[0]?.toString) {
-              console.error('Invalid validator key format');
-              return null;
-            }
+      // First check if we have access to the required modules
+      if (!api.query?.staking || !api.query?.session?.validators) {
+        throw new PolkadotHubError(
+          'Required modules not available',
+          ErrorCodes.API.ERROR,
+          'Required staking or session queries are not available'
+        );
+      }
 
-            const address = key.args[0].toString();
-            
-            // Safe query calls with fallbacks
-            const [identity, commission, activeEraOpt] = await Promise.all([
-              api.query.identity?.identityOf?.(address) || Promise.resolve(null),
-              stakingModule.validatorPrefs(address),
-              stakingModule.activeEra()
+      const stakingModule = api.query.staking;
+
+      // Get current validators from session module first
+      const currentValidators = await api.query.session.validators();
+      const validatorAddresses = (currentValidators as unknown as AccountId[]).map((v: AccountId) => v.toString());
+
+      if (validatorAddresses.length === 0) {
+        throw new PolkadotHubError(
+          'No validators found',
+          ErrorCodes.API.ERROR,
+          'Could not retrieve any validators from the network'
+        );
+      }
+
+      // Process each validator with proper error handling
+      const validatorInfos = await Promise.all(
+        validatorAddresses.map(async (address: string) => {
+          try {
+            // Fetch validator data with safe queries and proper error handling
+            const [identity, prefs] = await Promise.all([
+              api.query.identity?.identityOf?.(address).catch(() => null),
+              stakingModule?.validatorPrefs?.(address).catch(() => null) || Promise.resolve(null)
             ]);
 
-            let exposure = null;
-            if (activeEraOpt) {
-              try {
-                // We know these methods exist on Polkadot types
-                const activeEra = (activeEraOpt as unknown as { unwrap: () => any }).unwrap();
-                exposure = await stakingModule.erasStakers(activeEra, address);
-              } catch (error) {
-                console.error('Failed to get era stakers:', error);
-              }
-            }
+            // Get exposure data with proper error handling
+            let totalStake = '0';
+            let nominatorCount = 0;
 
-            // Safe data extraction with fallbacks
-            const validatorInfo: ValidatorInfo = {
-              address,
-              commission: (commission as any)?.commission?.toString() || '0',
-              totalStake: (exposure as any)?.total?.toString() || '0',
-              nominators: (exposure as any)?.others?.length || 0,
-              isActive: true,
-              rewardPoints: '0'
-            };
-
-            // Safe identity extraction
             try {
-              if (identity) {
-                const identityInfo = (identity as unknown as { unwrapOr: (defaultValue: any) => any })
-                  .unwrapOr(null)?.info?.toHuman();
-                if (identityInfo) {
-                  validatorInfo.identity = identityInfo as ValidatorIdentity;
+              // Try erasStakersClipped first as it's more reliable
+              if (stakingModule?.erasStakersClipped) {
+                const exposure = await stakingModule.erasStakersClipped(0, address);
+                if (exposure) {
+                  const exposureData = exposure as unknown as ValidatorExposure;
+                  totalStake = exposureData.total?.toString() || '0';
+                  nominatorCount = exposureData.others?.length || 0;
                 }
               }
             } catch (error) {
-              console.error('Failed to process identity info:', error);
+              log.warn(`Failed to get exposure for ${address}:`, error);
             }
+
+            const validatorInfo: ValidatorInfo = {
+              address,
+              commission: prefs ? (prefs as any)?.commission?.toString() || '0' : '0',
+              totalStake,
+              nominators: nominatorCount,
+              isActive: true,
+              identity: identity ? {
+                display: (identity as any)?.info?.display?.toString() || null,
+                email: (identity as any)?.info?.email?.toString() || null,
+                web: (identity as any)?.info?.web?.toString() || null,
+                twitter: (identity as any)?.info?.twitter?.toString() || null
+              } : null
+            };
 
             return validatorInfo;
           } catch (error) {
-            console.error('Failed to process validator:', error);
+            log.error(`Failed to process validator ${address}:`, error);
             return null;
           }
         })
       );
 
-      return validatorInfos.filter((info): info is ValidatorInfo => info !== null);
+      return validatorInfos.filter((info: ValidatorInfo | null): info is ValidatorInfo => info !== null);
     } catch (error) {
+      log.error('Failed to get validators:', error);
       throw new PolkadotHubError(
-        'Failed to fetch validator info',
-        ErrorCodes.API.ERROR,
-        error instanceof Error ? error.message : 'Unknown error occurred'
+        'Failed to get validators',
+        ErrorCodes.API.REQUEST_FAILED,
+        'Could not retrieve validator information. Please try again.'
       );
     }
   }
@@ -937,9 +876,9 @@ class PolkadotApiService {
 
   async getHistoricalRewards(startEra: number, endEra: number) {
     const api = await this.ensureApi();
-    const stakingModule = this.getStakingModule(api);
+    const stakingModule = api.query.staking;
 
-    if (!stakingModule.erasValidatorReward) {
+    if (!stakingModule?.erasRewardPoints) {
       throw new PolkadotHubError(
         'Staking module not available',
         ErrorCodes.DATA.STAKING_ERROR,
@@ -947,17 +886,19 @@ class PolkadotApiService {
       );
     }
 
+    const erasRewardPoints = stakingModule.erasRewardPoints;
+
     try {
       const rewards = await Promise.all(
         Array.from({ length: endEra - startEra + 1 }, (_, i) => startEra + i).map(async (era) => {
           try {
-            const reward = await stakingModule.erasValidatorReward(era);
+            const reward = await erasRewardPoints(era);
             return {
               era,
-              reward: reward.toString()
+              reward: reward ? (reward as any).total?.toString() || '0' : '0'
             };
           } catch (error) {
-            console.error(`Failed to fetch reward for era ${era}:`, error);
+            log.error(`Failed to fetch reward for era ${era}:`, error);
             return {
               era,
               reward: '0'

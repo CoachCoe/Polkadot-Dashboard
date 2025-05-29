@@ -101,7 +101,7 @@ class GovernanceService {
     favorites?: boolean;
   }): Promise<ReferendumInfo[]> {
     try {
-      const api = await polkadotService.getApi();
+      const api = await polkadotService.connect();
       if (!api?.query?.referenda?.referendumInfoFor) {
         throw new PolkadotHubError(
           'API not initialized',

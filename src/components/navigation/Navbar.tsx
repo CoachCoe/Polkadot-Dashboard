@@ -24,7 +24,7 @@ export function Navbar() {
                   priority
                 />
               </div>
-              <span className="text-xl font-semibold text-gray-900">Polkadot Dashboard</span>
+              <span className="font-medium text-gray-600 hover:text-gray-900">Portfolio</span>
             </Link>
             
             <div className="hidden md:flex items-center space-x-6">

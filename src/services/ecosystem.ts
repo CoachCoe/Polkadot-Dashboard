@@ -1,4 +1,4 @@
-import { Project, ProjectCategory, ProjectStatus, SocialLinks, ProjectStats, CategoryInfo } from '@/types/ecosystem';
+import { Project, ProjectCategory, ProjectStatus, SocialLinks, ProjectStats, CategoryInfo, ProjectFilter } from '@/types/ecosystem';
 import {
   CurrencyDollarIcon,
   PhotoIcon,
@@ -9,13 +9,7 @@ import {
 
 export type { Project, ProjectCategory, ProjectStatus, SocialLinks, ProjectStats };
 
-interface EcosystemFilters {
-  category?: string | undefined;
-  search?: string;
-  tags?: string[];
-}
-
-class EcosystemService {
+export class EcosystemService {
   private static instance: EcosystemService;
 
   private categories: CategoryInfo[] = [
@@ -164,17 +158,17 @@ class EcosystemService {
     return Array.from(tags).sort();
   }
 
-  getProjects(filters?: EcosystemFilters): Project[] {
+  getProjects(filters?: ProjectFilter): Project[] {
     let filteredProjects = [...this.projects];
 
-    if (filters?.category) {
+    if (filters?.categories?.length) {
       filteredProjects = filteredProjects.filter(
-        project => project.category === filters.category
+        project => filters.categories!.includes(project.category)
       );
     }
 
-    if (filters?.search) {
-      const searchLower = filters.search.toLowerCase();
+    if (filters?.searchTerm) {
+      const searchLower = filters.searchTerm.toLowerCase();
       filteredProjects = filteredProjects.filter(project =>
         project.name.toLowerCase().includes(searchLower) ||
         project.description.toLowerCase().includes(searchLower) ||
@@ -182,9 +176,27 @@ class EcosystemService {
       );
     }
 
-    if (filters?.tags?.length) {
+    if (filters?.status?.length) {
+      filteredProjects = filteredProjects.filter(
+        project => filters.status!.includes(project.status)
+      );
+    }
+
+    if (filters?.chains?.length) {
       filteredProjects = filteredProjects.filter(project =>
-        filters.tags!.every(tag => project.tags.includes(tag))
+        filters.chains!.some(chain => project.chains.includes(chain))
+      );
+    }
+
+    if (filters?.isVerified !== undefined) {
+      filteredProjects = filteredProjects.filter(
+        project => project.isVerified === filters.isVerified
+      );
+    }
+
+    if (filters?.isParachain !== undefined) {
+      filteredProjects = filteredProjects.filter(
+        project => project.isParachain === filters.isParachain
       );
     }
 

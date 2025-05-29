@@ -24,13 +24,14 @@ export function WalletConnect() {
         return;
       }
 
-      // Enable the wallet
+      // Enable the wallet first
       await wallet.enable('Polkadot Dashboard');
       
-      // Connect using the store
-      await connect();
+      // Connect using the store with the enabled wallet
+      await connect(wallet);
       setShowWalletList(false);
     } catch (err) {
+      console.error('Failed to connect wallet:', err);
       setError(err instanceof Error ? err.message : 'Failed to connect wallet');
     } finally {
       setIsLoading(false);
@@ -67,7 +68,7 @@ export function WalletConnect() {
 
   if (selectedAccount) {
     return (
-      <Popover>
+      <Popover open={showWalletList} onOpenChange={setShowWalletList}>
         <PopoverTrigger asChild>
           <Button variant="outline" className="flex items-center gap-2">
             <WalletIcon className="h-5 w-5" />

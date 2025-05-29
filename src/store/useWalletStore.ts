@@ -1,14 +1,14 @@
 'use client';
 
 import { create } from 'zustand';
-import { getWallets, type WalletAccount } from '@talismn/connect-wallets';
+import { getWallets, type WalletAccount, type Wallet } from '@talismn/connect-wallets';
 
 interface WalletState {
   accounts: WalletAccount[];
   selectedAccount: WalletAccount | null;
   isConnected: boolean;
   error: string | null;
-  connect: () => Promise<void>;
+  connect: (enabledWallet?: Wallet) => Promise<void>;
   disconnect: () => void;
   setSelectedAccount: (account: WalletAccount | null) => void;
 }
@@ -18,29 +18,33 @@ export const useWalletStore = create<WalletState>((set) => ({
   selectedAccount: null,
   isConnected: false,
   error: null,
-  connect: async () => {
+  connect: async (enabledWallet?: Wallet) => {
     if (typeof window === 'undefined') return;
     
     try {
-      const wallets = getWallets();
-      const installedWallets = wallets.filter(wallet => wallet.installed);
+      let wallet = enabledWallet;
       
-      if (installedWallets.length === 0) {
-        set({ error: 'Please install a supported wallet extension first' });
-        return;
-      }
-
-      // Try to connect to the first installed wallet
-      const wallet = installedWallets[0];
       if (!wallet) {
-        set({ error: 'No wallet available' });
-        return;
+        const wallets = getWallets();
+        const installedWallets = wallets.filter(w => w.installed);
+        
+        if (installedWallets.length === 0) {
+          set({ error: 'Please install a supported wallet extension first' });
+          return;
+        }
+
+        // Try to connect to the first installed wallet
+        wallet = installedWallets[0];
+        if (!wallet) {
+          set({ error: 'No wallet available' });
+          return;
+        }
+
+        // Enable the wallet if not already enabled
+        await wallet.enable('Polkadot Dashboard');
       }
 
-      // Enable the wallet first
-      await wallet.enable('Polkadot Dashboard');
-
-      // Then get accounts
+      // Get accounts
       const accounts = await wallet.getAccounts();
       
       if (!accounts || accounts.length === 0) {
@@ -61,6 +65,7 @@ export const useWalletStore = create<WalletState>((set) => ({
           ? error.message 
           : 'Failed to connect wallet. Please make sure a supported wallet extension is installed and enabled.'
       });
+      throw error; // Re-throw to let the component handle the error
     }
   },
   disconnect: () => {

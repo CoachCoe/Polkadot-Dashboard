@@ -2,20 +2,14 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { ecosystemService } from '@/services/ecosystem';
-import { Project, CategoryInfo } from '@/types/ecosystem';
+import { Project, CategoryInfo, ProjectFilter } from '@/types/ecosystem';
 import { PolkadotHubError, ErrorCodes } from '@/utils/errorHandling';
-
-interface EcosystemFilters {
-  category?: string | undefined;
-  search?: string;
-  tags?: string[];
-}
 
 export function useEcosystem() {
   const [categories, setCategories] = useState<CategoryInfo[]>([]);
   const [projects, setProjects] = useState<Project[]>([]);
   const [availableTags, setAvailableTags] = useState<string[]>([]);
-  const [filters, setFilters] = useState<EcosystemFilters>({});
+  const [filters, setFilters] = useState<ProjectFilter>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<PolkadotHubError | null>(null);
 
@@ -77,7 +71,7 @@ export function useEcosystem() {
     }
   }, [loadProjects, categories.length, isLoading]);
 
-  const updateFilters = useCallback((newFilters: Partial<EcosystemFilters>) => {
+  const updateFilters = useCallback((newFilters: Partial<ProjectFilter>) => {
     setFilters(prev => ({ ...prev, ...newFilters }));
   }, []);
 

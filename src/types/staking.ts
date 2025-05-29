@@ -1,3 +1,7 @@
+import type { Codec } from '@polkadot/types/types';
+import type { AccountId, Balance, Moment } from '@polkadot/types/interfaces';
+import type { StorageEntryBase } from '@polkadot/api/types/storage';
+
 export interface ChainInfo {
   name: string;
   tokenSymbol: string;
@@ -6,20 +10,19 @@ export interface ChainInfo {
 }
 
 export interface ValidatorIdentity {
-  display?: string;
-  web?: string;
-  email?: string;
-  twitter?: string;
+  display: string | null;
+  email: string | null;
+  web: string | null;
+  twitter: string | null;
 }
 
 export interface ValidatorInfo {
   address: string;
-  identity?: ValidatorIdentity;
   commission: string;
   totalStake: string;
   nominators: number;
   isActive: boolean;
-  rewardPoints?: string;
+  identity: ValidatorIdentity | null;
 }
 
 export interface StakingInfo {
@@ -57,10 +60,54 @@ export interface TransactionStatus {
   error?: string;
 }
 
+export type AnyFunction = (...args: any[]) => any;
+export type AnyStorageEntry = StorageEntryBase<'promise', AnyFunction, any[]>;
+
 export interface StakingQueries {
-  validators: any;  // Using any temporarily to fix type issues
-  validatorPrefs: any;
-  erasStakers: any;
-  activeEra: any;
-  erasStakersPayout: any;
+  validators: AnyStorageEntry;
+  validatorPrefs: AnyStorageEntry;
+  activeEra: AnyStorageEntry;
+  erasStakersPayout: AnyStorageEntry;
+}
+
+// Polkadot API specific types
+export interface StorageKey<T = any> extends Codec {
+  args: T[];
+  meta: any;
+  method: string;
+  section: string;
+  toJSON: () => any;
+  toString: () => string;
+}
+
+export interface ValidatorExposure {
+  total?: Balance;
+  own?: Balance;
+  others: Array<{
+    who: AccountId;
+    value: Balance;
+  }>;
+}
+
+export interface ValidatorPrefs {
+  commission: number;
+  blocked: boolean;
+}
+
+export interface EraIndex extends Codec {
+  toNumber: () => number;
+}
+
+export interface ActiveEraInfo {
+  index: EraIndex;
+  start: Option<Moment>;
+}
+
+export interface Option<T> {
+  isSome: boolean;
+  isNone: boolean;
+  value?: T;
+  unwrap: () => T;
+  unwrapOr: (defaultValue: T) => T;
+  unwrapOrDefault: () => T;
 } 
