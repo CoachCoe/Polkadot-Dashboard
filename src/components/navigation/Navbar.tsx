@@ -17,13 +17,14 @@ export function Navbar() {
             <Link href="/" className="flex items-center space-x-3">
               <div className="relative w-8 h-8">
                 <Image
-                  src={`${basePath}/images/polkadot-logo.svg`}
+                  src={`${basePath}/images/mark-polkadot.svg`}
                   alt="Polkadot"
                   fill
                   className="object-contain"
                   priority
                 />
               </div>
+              <span className="font-medium text-gray-600 hover:text-gray-900">Polkadot Hub</span>
             </Link>
             
             <div className="hidden md:flex items-center space-x-6">
