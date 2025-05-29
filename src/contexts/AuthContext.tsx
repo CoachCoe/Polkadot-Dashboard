@@ -1,59 +1,45 @@
 'use client';
 
-import React, { createContext, useContext, useState } from 'react';
-import { useWalletStore } from '@/store/useWalletStore';
+import React, { createContext, useContext, useState, useEffect } from 'react';
+import { useSession } from 'next-auth/react';
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  error: Error | null;
-  login: () => Promise<void>;
-  logout: () => void;
+  isLoading: boolean;
+  user: any | null;
 }
 
-const AuthContext = createContext<AuthContextType | undefined>(undefined);
+const AuthContext = createContext<AuthContextType>({
+  isAuthenticated: false,
+  isLoading: true,
+  user: null,
+});
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
-  const { selectedAccount, connect, disconnect } = useWalletStore();
-  const [error, setError] = useState<Error | null>(null);
+  const { data: session, status } = useSession();
+  const [isLoading, setIsLoading] = useState(true);
 
-  const login = async () => {
-    try {
-      setError(null);
-      await connect();
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to authenticate'));
-      throw err;
-    }
-  };
+  useEffect(() => {
+    setIsLoading(status === 'loading');
+  }, [status]);
 
-  const logout = () => {
-    try {
-      disconnect();
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err : new Error('Failed to logout'));
-      throw err;
-    }
+  const value = {
+    isAuthenticated: !!session,
+    isLoading,
+    user: session?.user || null,
   };
 
   return (
-    <AuthContext.Provider
-      value={{
-        isAuthenticated: !!selectedAccount,
-        error,
-        login,
-        logout,
-      }}
-    >
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
 }
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
   if (context === undefined) {
     throw new Error('useAuth must be used within an AuthProvider');
   }
   return context;
-} 
+}; 

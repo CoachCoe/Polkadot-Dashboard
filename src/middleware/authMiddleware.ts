@@ -140,7 +140,7 @@ export async function authMiddleware(request: NextRequest) {
   }
 }
 
-function getSecurityHeaders() {
+function getSecurityHeaders(): Record<string, string> {
   return {
     'Strict-Transport-Security': `max-age=${securityConfig.headers.strictTransportSecurity.maxAge}; includeSubDomains; preload`,
     'X-Frame-Options': securityConfig.headers.frameguard,
