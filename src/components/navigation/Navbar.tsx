@@ -17,14 +17,13 @@ export function Navbar() {
             <Link href="/" className="flex items-center space-x-3">
               <div className="relative w-8 h-8">
                 <Image
-                  src={`${basePath}/images/logo.svg`}
-                  alt="Polkadot Hub"
+                  src={`${basePath}/images/polkadot-logo.svg`}
+                  alt="Polkadot"
                   fill
                   className="object-contain"
                   priority
                 />
               </div>
-              <span className="font-medium text-gray-600 hover:text-gray-900">Portfolio</span>
             </Link>
             
             <div className="hidden md:flex items-center space-x-6">
@@ -32,7 +31,7 @@ export function Navbar() {
                 href="/dashboard" 
                 className={`font-medium ${pathname === '/dashboard' ? 'text-[#E6007A]' : 'text-gray-600 hover:text-gray-900'}`}
               >
-                Dashboard
+                Portfolio Dashboard
               </Link>
               <Link 
                 href="/staking" 
