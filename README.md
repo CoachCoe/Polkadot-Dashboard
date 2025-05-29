@@ -1,18 +1,35 @@
 # Polkadot Dashboard
 
-A modern, feature-rich dashboard for the Polkadot ecosystem, built with Next.js, TypeScript, and Tailwind CSS.
+A modern, feature-rich dashboard for the Polkadot ecosystem, built with Next.js, TypeScript, and Tailwind CSS. Access real-time blockchain data, manage your portfolio, and explore the Polkadot ecosystem all in one place.
 
 ## Features
 
 ### Portfolio Management
 - Real-time balance tracking across multiple accounts
 - Detailed breakdown of total, available, and locked balances
+- Cross-chain balance monitoring (Polkadot, Asset Hub, Acala, Moonbeam, Astar)
 - WebSocket integration for live balance updates
-- Support for DOT and other ecosystem tokens
+- Support for DOT and ecosystem tokens
 - Interactive balance cards with responsive design
+- Staking rewards tracking and analytics
+
+### Staking Features
+- Real-time validator information
+- Staking rewards history and analytics
+- APR calculations and projections
+- Validator performance metrics
+- Bonding and unbonding management
+- Era and epoch tracking
+
+### Governance Integration
+- Referendum tracking and voting
+- Delegation management
+- Governance participation analytics
+- Democracy locks monitoring
+- Proposal tracking and analysis
 
 ### Ecosystem Explorer
-- Comprehensive project directory with detailed information about Polkadot ecosystem projects
+- Comprehensive project directory
 - Advanced filtering and sorting capabilities
 - Real-time project statistics and analytics
 - Project categories: DeFi, NFTs, Infrastructure, Developer Tools, Gaming, Social, DAOs, Privacy, and Identity
@@ -24,73 +41,53 @@ A modern, feature-rich dashboard for the Polkadot ecosystem, built with Next.js,
   - GitHub statistics
   - Performance analytics
 
-### Project Stats
-- Total Value Locked (TVL)
-- Daily Active Users
-- Transaction volumes
-- Market capitalization
-- Token holder statistics
-- GitHub engagement metrics
-
 ### Wallet Integration
-- Seamless wallet connection and management
+- Seamless wallet connection via Polkadot.js extension
+- Multi-account support
 - Real-time balance monitoring
-- Support for multiple accounts
 - Secure transaction handling
 - Balance history tracking
+- Cross-chain transaction support
 
 ## Technology Stack
 
 - **Frontend**: Next.js 14, React 18, TypeScript
 - **Styling**: Tailwind CSS, Radix UI components
-- **State Management**: React Query, Zustand
+- **State Management**: Zustand
 - **API Integration**: 
   - Polkadot.js API
   - WebSocket connections for real-time updates
-- **Authentication**: NextAuth.js
-- **Testing**: Jest, React Testing Library
+  - Subscan API integration
+- **Data Handling**: 
+  - @polkadot/api
+  - @polkadot/util
+  - @polkadot/extension-dapp
+- **Build & Deploy**: GitHub Actions, GitHub Pages
 - **Real-time Updates**: WebSocket integration
-- **Data Formatting**: @polkadot/util
 
 ## Getting Started
 
 ### Prerequisites
-- Node.js 18.x or later
+- Node.js 20.x or later
 - npm or yarn package manager
+- Polkadot.js extension installed in your browser
 
 ### Installation
 
 1. Clone the repository:
 ```bash
-git clone https://github.com/yourusername/polkadot-dashboard.git
-cd polkadot-dashboard
+git clone https://github.com/CoachCoe/Polkadot-Dashboard.git
+cd Polkadot-Dashboard
 ```
 
 2. Install dependencies:
 ```bash
 npm install
-# or
-yarn install
 ```
 
-3. Set up environment variables:
-```bash
-cp .env.example .env.local
-```
-Edit `.env.local` with your configuration.
-
-4. Seed the project data:
-```bash
-npm run seed
-# or
-yarn seed
-```
-
-5. Start the development server:
+3. Start the development server:
 ```bash
 npm run dev
-# or
-yarn dev
 ```
 
 The application will be available at `http://localhost:3000`.
@@ -101,14 +98,20 @@ The application will be available at `http://localhost:3000`.
 src/
 ├── app/                    # Next.js app directory
 │   ├── ecosystem/         # Ecosystem explorer pages
-│   └── api/               # API routes
+│   ├── staking/          # Staking management pages
+│   ├── governance/       # Governance pages
+│   └── portfolio/        # Portfolio pages
 ├── components/            # React components
 │   ├── ecosystem/        # Ecosystem-specific components
-│   ├── portfolio/        # Portfolio and balance components
+│   ├── staking/         # Staking components
+│   ├── governance/      # Governance components
+│   ├── portfolio/        # Portfolio components
 │   └── ui/               # Reusable UI components
 ├── services/             # Service layer
-│   ├── portfolioService  # Portfolio management services
-│   └── ...              # Other services
+│   ├── polkadotApiService # Polkadot API integration
+│   ├── portfolioService   # Portfolio management
+│   ├── stakingService    # Staking operations
+│   └── governanceService # Governance operations
 ├── store/               # State management
 ├── hooks/               # Custom React hooks
 ├── types/               # TypeScript type definitions
@@ -118,11 +121,9 @@ src/
 ## Available Scripts
 
 - `npm run dev` - Start development server
-- `npm run build` - Build production bundle
-- `npm run start` - Start production server
+- `npm run build` - Build static export
 - `npm run lint` - Run ESLint
-- `npm run seed` - Seed project data
-- `npm test` - Run tests
+- `npm run test` - Run tests
 
 ## Contributing
 
@@ -141,3 +142,4 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - [Polkadot Network](https://polkadot.network/)
 - [Polkadot.js](https://polkadot.js.org/)
 - [Substrate](https://substrate.io/)
+- [Subscan](https://subscan.io/)
