@@ -4,6 +4,7 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { ApiPromise, WsProvider } from '@polkadot/api';
 import type { ProviderInterface } from '@polkadot/rpc-provider/types';
 import { web3Enable } from '@polkadot/extension-dapp';
+import { useWalletStore } from '@/store/useWalletStore';
 
 interface PolkadotContextType {
   api: ApiPromise | null;
@@ -27,39 +28,59 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
   const [api, setApi] = useState<ApiPromise | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const { selectedAccount } = useWalletStore();
 
   useEffect(() => {
+    let isSubscribed = true;
+    let currentApi: ApiPromise | null = null;
+
     const initPolkadot = async () => {
       try {
+        if (!selectedAccount) {
+          if (currentApi) {
+            await currentApi.disconnect();
+            if (isSubscribed) {
+              setApi(null);
+              setIsConnected(false);
+            }
+          }
+          return;
+        }
+
         // Initialize the API
         const wsProvider = new WsProvider('wss://rpc.polkadot.io');
         const provider = wsProvider as unknown as ProviderInterface;
-        const api = await ApiPromise.create({ provider });
-        setApi(api);
+        const newApi = await ApiPromise.create({ provider });
+        currentApi = newApi;
 
         // Enable the extension
         const extensions = await web3Enable('Polkadot Hub');
         if (extensions.length === 0) {
-          setError('No extension found');
-          return;
+          throw new Error('No extension found');
         }
 
-        setIsConnected(true);
-        setError(null);
+        if (isSubscribed) {
+          setApi(newApi);
+          setIsConnected(true);
+          setError(null);
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to connect to Polkadot network');
-        setIsConnected(false);
+        if (isSubscribed) {
+          setError(err instanceof Error ? err.message : 'Failed to connect to Polkadot network');
+          setIsConnected(false);
+        }
       }
     };
 
     void initPolkadot();
 
     return () => {
-      if (api) {
-        void api.disconnect();
+      isSubscribed = false;
+      if (currentApi) {
+        void currentApi.disconnect();
       }
     };
-  }, []);
+  }, [selectedAccount]);
 
   return (
     <PolkadotContext.Provider value={{ api, isConnected, error }}>
