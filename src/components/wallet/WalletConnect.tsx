@@ -1,14 +1,22 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, memo } from 'react';
 import { useWalletStore } from '@/store/useWalletStore';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/Popover';
 import { WalletIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { getWallets, type Wallet } from '@talismn/connect-wallets';
+import { retry } from '@/utils/common';
+import { configService } from '@/services/configService';
+import { ERROR_MESSAGES } from '@/config/constants';
+import type { WalletAccount } from '@/types/wallet';
 
-export function WalletConnect() {
+interface WalletConnectProps {
+  className?: string;
+}
+
+export const WalletConnect = memo(function WalletConnect({ className }: WalletConnectProps) {
   const { selectedAccount, connect, disconnect } = useWalletStore();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -24,15 +32,19 @@ export function WalletConnect() {
         return;
       }
 
-      // Enable the wallet first
-      await wallet.enable('Polkadot Dashboard');
+      await retry(
+        async () => {
+          await wallet.enable('Polkadot Dashboard');
+          await connect(wallet);
+        },
+        configService.maxRetryAttempts,
+        configService.retryDelay
+      );
       
-      // Connect using the store with the enabled wallet
-      await connect(wallet);
       setShowWalletList(false);
     } catch (err) {
       console.error('Failed to connect wallet:', err);
-      setError(err instanceof Error ? err.message : 'Failed to connect wallet');
+      setError(ERROR_MESSAGES.WALLET_CONNECTION_FAILED);
     } finally {
       setIsLoading(false);
     }
@@ -42,7 +54,7 @@ export function WalletConnect() {
     disconnect();
   };
 
-  const getDisplayName = (account: any) => {
+  const getDisplayName = (account: WalletAccount): string => {
     if (account.name) return account.name;
     if (account.source) return `${account.source} Account`;
     return `${account.address.slice(0, 4)}...${account.address.slice(-4)}`;
@@ -70,7 +82,7 @@ export function WalletConnect() {
     return (
       <Popover open={showWalletList} onOpenChange={setShowWalletList}>
         <PopoverTrigger asChild>
-          <Button variant="outline" className="flex items-center gap-2">
+          <Button variant="outline" className={`flex items-center gap-2 ${className}`}>
             <WalletIcon className="h-5 w-5" />
             <span className="truncate max-w-[150px]">
               {getDisplayName(selectedAccount)}
@@ -106,7 +118,7 @@ export function WalletConnect() {
       <PopoverTrigger asChild>
         <Button
           variant="outline"
-          className="flex items-center gap-2"
+          className={`flex items-center gap-2 ${className}`}
           disabled={isLoading}
           onClick={() => setShowWalletList(true)}
         >
@@ -140,4 +152,4 @@ export function WalletConnect() {
       </PopoverContent>
     </Popover>
   );
-} 
+}); 

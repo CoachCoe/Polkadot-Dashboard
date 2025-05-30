@@ -2,88 +2,63 @@
 
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { getWallets, type WalletAccount, type Wallet } from '@talismn/connect-wallets';
+import type { Wallet } from '@talismn/connect-wallets';
+import type { WalletState, WalletStore } from '@/types/wallet';
+import { ERROR_MESSAGES } from '@/config/constants';
 
-interface WalletState {
-  accounts: WalletAccount[];
-  selectedAccount: WalletAccount | null;
-  isConnected: boolean;
-  error: string | null;
-  connect: (enabledWallet?: Wallet) => Promise<void>;
-  disconnect: () => void;
-  setSelectedAccount: (account: WalletAccount | null) => void;
-}
+const initialState: WalletState = {
+  selectedAccount: null,
+  wallet: null,
+  isConnecting: false,
+  error: null,
+};
 
-export const useWalletStore = create<WalletState>()(
+export const useWalletStore = create<WalletStore>()(
   persist(
     (set) => ({
-      accounts: [],
-      selectedAccount: null,
-      isConnected: false,
-      error: null,
-      connect: async (enabledWallet?: Wallet) => {
-        if (typeof window === 'undefined') return;
-        
+      ...initialState,
+
+      connect: async (wallet: Wallet) => {
         try {
-          let wallet = enabledWallet;
-          
-          if (!wallet) {
-            const wallets = getWallets();
-            const installedWallets = wallets.filter(w => w.installed);
-            
-            if (installedWallets.length === 0) {
-              set({ error: 'Please install a supported wallet extension first' });
-              return;
-            }
+          set({ isConnecting: true, error: null });
 
-            // Try to connect to the first installed wallet
-            wallet = installedWallets[0];
-            if (!wallet) {
-              set({ error: 'No wallet available' });
-              return;
-            }
-
-            // Enable the wallet if not already enabled
-            await wallet.enable('Polkadot Dashboard');
-          }
-
-          // Get accounts
+          // Get accounts from the wallet
           const accounts = await wallet.getAccounts();
-          
           if (!accounts || accounts.length === 0) {
-            set({ error: 'No accounts found. Please create an account in your wallet extension' });
-            return;
+            throw new Error(ERROR_MESSAGES.NO_ACCOUNTS_FOUND);
           }
 
-          set({ accounts, isConnected: true, error: null });
+          // Select the first account for now
+          const selectedAccount = accounts[0];
 
-          // If there's only one account, select it automatically
-          if (accounts.length === 1) {
-            set({ selectedAccount: accounts[0] ?? null });
-          }
-        } catch (error) {
-          console.error('Wallet connection error:', error);
-          set({ 
-            error: error instanceof Error 
-              ? error.message 
-              : 'Failed to connect wallet. Please make sure a supported wallet extension is installed and enabled.'
+          set({
+            selectedAccount,
+            wallet,
+            isConnecting: false,
+            error: null,
           });
-          throw error; // Re-throw to let the component handle the error
+        } catch (error) {
+          console.error('Failed to connect wallet:', error);
+          set({
+            isConnecting: false,
+            error: error instanceof Error ? error.message : ERROR_MESSAGES.WALLET_CONNECTION_FAILED,
+          });
+          throw error;
         }
       },
+
       disconnect: () => {
-        set({ accounts: [], selectedAccount: null, isConnected: false, error: null });
+        set(initialState);
       },
-      setSelectedAccount: (account) => {
-        set({ selectedAccount: account });
+
+      setError: (error: string | null) => {
+        set({ error });
       },
     }),
     {
       name: 'wallet-storage',
       partialize: (state) => ({
-        accounts: state.accounts,
         selectedAccount: state.selectedAccount,
-        isConnected: state.isConnected,
       }),
     }
   )

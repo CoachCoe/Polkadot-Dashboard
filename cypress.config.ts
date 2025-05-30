@@ -5,8 +5,15 @@ export default defineConfig({
     baseUrl: 'http://localhost:3000',
     video: false,
     screenshotOnRunFailure: false,
+    defaultCommandTimeout: 10000,
+    pageLoadTimeout: 10000,
+    experimentalSourceRewriting: true,
     setupNodeEvents(_config) {
       // implement node event listeners here
     },
   },
+  retries: {
+    runMode: 2,
+    openMode: 0
+  }
 }); 

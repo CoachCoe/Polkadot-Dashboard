@@ -1,9 +1,12 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { Twitter, MessageCircle, Linkedin } from 'lucide-react';
 
 export function Footer() {
+  const basePath = process.env.NODE_ENV === 'production' ? '/Polkadot-Dashboard' : '';
+
   return (
     <footer className="bg-white border-t border-gray-200">
       <div className="container mx-auto px-6 py-8">
@@ -37,9 +40,18 @@ export function Footer() {
               <span className="sr-only">Polkadot LinkedIn</span>
             </Link>
           </div>
-          <p className="text-gray-600 text-sm">
-            © {new Date().getFullYear()} Polkadot Hub. All rights reserved.
-          </p>
+          <div className="flex items-center space-x-4 text-gray-600 text-sm">
+            <span>Built with ❤️ for the Polkadot community</span>
+            <div className="relative w-4 h-4">
+              <Image
+                src={`${basePath}/images/mark-polkadot.svg`}
+                alt="Polkadot"
+                fill
+                className="object-contain"
+              />
+            </div>
+            <span>© {new Date().getFullYear()} Polkadot Hub. All rights reserved.</span>
+          </div>
         </div>
       </div>
     </footer>

@@ -52,10 +52,6 @@ describe('HomePage', () => {
 
   it('renders all footer links', () => {
     render(<HomePage />);
-    const footerLinks = ['GitHub', 'Polkadot Network', 'Polkadot.js', 'Wiki'];
-    footerLinks.forEach(link => {
-      screen.getByRole('link', { name: link });
-    });
     // @ts-ignore
     expect(screen.getByText('Built with ❤️ for the Polkadot community')).toBeInTheDocument();
   });

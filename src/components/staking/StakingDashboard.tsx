@@ -127,9 +127,9 @@ export function StakingDashboard() {
   return (
     <div className="space-y-6">
       {/* Staking Overview */}
-      <Card className="p-6">
-        <div className="flex justify-between items-start mb-6">
-          <h2 className="text-2xl font-semibold">Staking Overview</h2>
+      <Card className="p-8 bg-white shadow-lg rounded-xl border-0">
+        <div className="flex justify-between items-start mb-8">
+          <h2 className="text-2xl font-semibold text-gray-900">Staking Overview</h2>
           <Button
             variant="outline"
             onClick={() => {
@@ -137,6 +137,7 @@ export function StakingDashboard() {
               void loadNominatorInfo();
             }}
             disabled={isLoading}
+            className="text-gray-700 hover:text-gray-900"
           >
             <ArrowPathIcon className={`w-5 h-5 ${isLoading ? 'animate-spin' : ''}`} />
             <span className="ml-2">Refresh</span>
@@ -149,22 +150,22 @@ export function StakingDashboard() {
           </div>
         )}
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <h3 className="text-sm font-medium text-gray-500">Total Staked</h3>
-            <p className="mt-2 text-3xl font-semibold">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
+          <div className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-xl shadow-sm border border-gray-100 transition-transform duration-200 hover:scale-[1.02]">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">Total Staked</h3>
+            <p className="text-3xl font-bold text-gray-900">
               {stakingInfo ? formatBalance(stakingInfo.totalStaked, { withUnit: 'DOT' }) : '-'}
             </p>
           </div>
-          <div>
-            <h3 className="text-sm font-medium text-gray-500">Current Era</h3>
-            <p className="mt-2 text-3xl font-semibold">
+          <div className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-xl shadow-sm border border-gray-100 transition-transform duration-200 hover:scale-[1.02]">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">Current Era</h3>
+            <p className="text-3xl font-bold text-gray-900">
               {stakingInfo?.activeEra || '-'}
             </p>
           </div>
-          <div>
-            <h3 className="text-sm font-medium text-gray-500">Reward Rate</h3>
-            <p className="mt-2 text-3xl font-semibold">
+          <div className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-xl shadow-sm border border-gray-100 transition-transform duration-200 hover:scale-[1.02]">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">Reward Rate</h3>
+            <p className="text-3xl font-bold text-gray-900">
               {stakingInfo ? `${(Number(stakingInfo.rewardRate) / 1e10).toFixed(2)}%` : '-'}
             </p>
           </div>
@@ -172,25 +173,25 @@ export function StakingDashboard() {
       </Card>
 
       {/* Your Staking */}
-      <Card className="p-6">
-        <h2 className="text-2xl font-semibold mb-6">Your Staking</h2>
+      <Card className="p-8 bg-white shadow-lg rounded-xl border-0">
+        <h2 className="text-2xl font-semibold text-gray-900 mb-8">Your Staking</h2>
         
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <div>
-            <h3 className="text-sm font-medium text-gray-500">Your Stake</h3>
-            <p className="mt-2 text-3xl font-semibold">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8 mb-8">
+          <div className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-xl shadow-sm border border-gray-100">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">Your Stake</h3>
+            <p className="text-3xl font-bold text-gray-900">
               {nominatorInfo ? formatBalance(nominatorInfo.totalStaked, { withUnit: 'DOT' }) : '0 DOT'}
             </p>
           </div>
-          <div>
-            <h3 className="text-sm font-medium text-gray-500">Last Era Rewards</h3>
-            <p className="mt-2 text-3xl font-semibold">
+          <div className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-xl shadow-sm border border-gray-100">
+            <h3 className="text-sm font-medium text-gray-500 mb-2">Last Era Rewards</h3>
+            <p className="text-3xl font-bold text-gray-900">
               {nominatorInfo ? formatBalance(nominatorInfo.rewards.lastEra, { withUnit: 'DOT' }) : '0 DOT'}
             </p>
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-6">
           <div className="flex gap-4">
             <Input
               type="text"
@@ -199,25 +200,34 @@ export function StakingDashboard() {
               onChange={(e) => setStakeAmount(e.target.value)}
               className="flex-1"
             />
-            <Button onClick={() => void handleStake()} disabled={isLoading || !stakeAmount}>
+            <Button 
+              onClick={() => void handleStake()} 
+              disabled={isLoading || !stakeAmount}
+              className="bg-polkadot-pink hover:bg-polkadot-pink-dark text-white"
+            >
               Stake
             </Button>
-            <Button onClick={() => void handleUnbond()} disabled={isLoading || !stakeAmount} variant="outline">
+            <Button 
+              onClick={() => void handleUnbond()} 
+              disabled={isLoading || !stakeAmount} 
+              variant="outline"
+              className="border-polkadot-pink text-polkadot-pink hover:bg-polkadot-pink hover:text-white"
+            >
               Unbond
             </Button>
           </div>
 
           {nominatorInfo?.unlocking && nominatorInfo.unlocking.length > 0 && (
-            <div className="p-4 bg-gray-50 rounded-lg">
-              <h4 className="text-sm font-medium text-gray-700 mb-2 flex items-center">
-                <ClockIcon className="w-5 h-5 mr-2" />
+            <div className="p-6 bg-gradient-to-br from-gray-50 to-white rounded-xl border border-gray-100">
+              <h4 className="text-sm font-medium text-gray-900 mb-4 flex items-center">
+                <ClockIcon className="w-5 h-5 mr-2 text-gray-500" />
                 Unstaking in Progress
               </h4>
-              <div className="space-y-2">
+              <div className="space-y-3">
                 {nominatorInfo.unlocking.map((unlock, index) => (
-                  <div key={index} className="flex justify-between text-sm">
-                    <span>{formatBalance(unlock.value, { withUnit: 'DOT' })}</span>
-                    <span>Available in Era {unlock.era}</span>
+                  <div key={index} className="flex justify-between items-center text-sm p-3 bg-white rounded-lg shadow-sm">
+                    <span className="font-medium text-gray-900">{formatBalance(unlock.value, { withUnit: 'DOT' })}</span>
+                    <span className="text-gray-500">Available in Era {unlock.era}</span>
                   </div>
                 ))}
               </div>
@@ -228,7 +238,7 @@ export function StakingDashboard() {
 
       {/* Validator Selection */}
       <div>
-        <h2 className="text-2xl font-semibold mb-4">Select Validators</h2>
+        <h2 className="text-2xl font-semibold text-gray-900 mb-6">Select Validators</h2>
         <ValidatorBrowser
           selectedValidators={selectedValidators}
           onSelect={setSelectedValidators}

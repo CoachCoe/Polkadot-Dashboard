@@ -2,7 +2,6 @@
 const webpack = require('webpack');
 
 const nextConfig = {
-  output: 'export',
   reactStrictMode: true,
   swcMinify: true,
   experimental: {
@@ -66,11 +65,6 @@ const nextConfig = {
     ],
     unoptimized: true,
   },
-  // Remove basePath and assetPrefix for local development
-  ...(process.env.NODE_ENV === 'production' ? {
-    basePath: '/Polkadot-Dashboard',
-    assetPrefix: '/Polkadot-Dashboard',
-  } : {}),
 }
 
 module.exports = nextConfig 

@@ -31,7 +31,7 @@ jest.mock('@/services/encryptionService', () => ({
       decrypt: jest.fn((data: string) => data)
     }))
   }
-}));
+})); 
 
 declare global {
   namespace jest {

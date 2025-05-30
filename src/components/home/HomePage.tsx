@@ -2,6 +2,7 @@ import React from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
+import { Footer } from '@/components/layout/Footer';
 
 export function HomePage() {
   return (
@@ -112,23 +113,7 @@ export function HomePage() {
       </div>
 
       {/* Footer */}
-      <footer className="container mx-auto px-4 py-12 text-center">
-        <div className="flex justify-center gap-8 mb-8">
-          <Link href="https://github.com/CoachCoe/Polkadot-Dashboard" target="_blank" className="text-gray-600 hover:text-gray-900">
-            GitHub
-          </Link>
-          <Link href="https://polkadot.network/" target="_blank" className="text-gray-600 hover:text-gray-900">
-            Polkadot Network
-          </Link>
-          <Link href="https://polkadot.js.org/" target="_blank" className="text-gray-600 hover:text-gray-900">
-            Polkadot.js
-          </Link>
-          <Link href="https://wiki.polkadot.network/" target="_blank" className="text-gray-600 hover:text-gray-900">
-            Wiki
-          </Link>
-        </div>
-        <p className="text-gray-600">Built with ❤️ for the Polkadot community</p>
-      </footer>
+      <Footer />
     </div>
   );
 } 

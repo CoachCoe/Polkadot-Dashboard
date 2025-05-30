@@ -28,7 +28,8 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
   const [api, setApi] = useState<ApiPromise | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { selectedAccount, isConnected: isWalletConnected } = useWalletStore();
+  const { selectedAccount } = useWalletStore();
+  const isWalletConnected = !!selectedAccount;
 
   useEffect(() => {
     let isSubscribed = true;
@@ -55,14 +56,14 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
 
         // Initialize the API if we don't have one
         if (!currentApi || !currentApi.isConnected) {
-          const wsProvider = new WsProvider('wss://rpc.polkadot.io');
-          const provider = wsProvider as unknown as ProviderInterface;
+        const wsProvider = new WsProvider('wss://rpc.polkadot.io');
+        const provider = wsProvider as unknown as ProviderInterface;
           const newApi = await ApiPromise.create({ provider });
           currentApi = newApi;
 
-          // Enable the extension
-          const extensions = await web3Enable('Polkadot Hub');
-          if (extensions.length === 0) {
+        // Enable the extension
+        const extensions = await web3Enable('Polkadot Hub');
+        if (extensions.length === 0) {
             throw new Error('No extension found');
           }
 
@@ -77,19 +78,19 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
           newApi.on('disconnected', () => {
             if (isSubscribed) {
               setIsConnected(false);
-            }
+        }
           });
 
           if (isSubscribed) {
             setApi(newApi);
-            setIsConnected(true);
-            setError(null);
+        setIsConnected(true);
+        setError(null);
           }
         }
       } catch (err) {
         if (isSubscribed) {
-          setError(err instanceof Error ? err.message : 'Failed to connect to Polkadot network');
-          setIsConnected(false);
+        setError(err instanceof Error ? err.message : 'Failed to connect to Polkadot network');
+        setIsConnected(false);
         }
       }
     };

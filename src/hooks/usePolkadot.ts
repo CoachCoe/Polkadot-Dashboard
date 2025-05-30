@@ -9,7 +9,6 @@ import type { ProviderInterface } from '@polkadot/rpc-provider/types';
 interface UsePolkadotReturn {
   isConnected: boolean;
   isWalletConnected: boolean;
-  accounts: WalletAccount[];
   selectedAccount: WalletAccount | null;
   api: ApiPromise | null;
   connect: () => Promise<void>;
@@ -18,7 +17,7 @@ interface UsePolkadotReturn {
 }
 
 export function usePolkadot(): UsePolkadotReturn {
-  const { selectedAccount, disconnect: walletDisconnect, accounts } = useWalletStore();
+  const { selectedAccount, disconnect: walletDisconnect } = useWalletStore();
   const [isConnected, setIsConnected] = useState(false);
   const [isWalletConnected, setIsWalletConnected] = useState(false);
   const [api, setApi] = useState<ApiPromise | null>(null);
@@ -118,7 +117,6 @@ export function usePolkadot(): UsePolkadotReturn {
   return {
     isConnected,
     isWalletConnected,
-    accounts,
     selectedAccount,
     api,
     connect: handleConnect,

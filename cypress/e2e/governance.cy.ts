@@ -2,12 +2,26 @@ describe('Governance Page', () => {
   beforeEach(() => {
     // Clear localStorage before each test
     cy.clearLocalStorage();
-    // Connect wallet before visiting the page
+    
+    // Start from the home page and connect wallet
+    cy.visit('/', { 
+      timeout: 10000,
+      failOnStatusCode: false
+    });
+    cy.findByRole('button', { name: /connect wallet/i }).should('exist');
     cy.connectWallet();
-    cy.visit('/governance');
-    // Wait for the page to load and verify wallet connection
+    
+    // Verify wallet is connected
+    cy.findByRole('button', { name: /5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY/i })
+      .should('exist');
+    
+    // Navigate to governance page
+    cy.findByRole('link', { name: /governance/i }).click();
+    
+    // Wait for the page to load and verify we're on the governance page
     cy.findByRole('heading', { name: /^governance$/i, level: 1 }).should('exist');
-    cy.findByRole('button', { name: /5grw.*utqy/i }).should('exist');
+    cy.findByRole('button', { name: /5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY/i })
+      .should('exist');
   });
 
   it('displays the main governance sections', () => {
@@ -49,5 +63,11 @@ describe('Governance Page', () => {
     cy.findByRole('tab', { name: /delegation/i }).click();
     cy.findByRole('tab', { name: /delegation/i }).should('have.attr', 'data-state', 'active');
     cy.findByRole('tabpanel', { name: /delegation/i }).should('be.visible');
+    
+    // Verify wallet is still connected after tab switch
+    cy.findByRole('button', { name: /5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY/i })
+      .should('exist')
+      .click();
+    cy.findByRole('heading', { name: /connected account/i }).should('exist');
   });
 }); 
