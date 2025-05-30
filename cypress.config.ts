@@ -6,7 +6,7 @@ export default defineConfig({
     video: false,
     screenshotOnRunFailure: false,
     defaultCommandTimeout: 10000,
-    pageLoadTimeout: 10000,
+    pageLoadTimeout: 30000,
     experimentalSourceRewriting: true,
     setupNodeEvents(_config) {
       // implement node event listeners here

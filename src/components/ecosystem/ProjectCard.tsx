@@ -11,6 +11,8 @@ interface ProjectCardProps {
   project: Project;
 }
 
+const basePath = process.env.NODE_ENV === 'production' ? '/Polkadot-Dashboard' : '';
+
 export function ProjectCard({ project }: ProjectCardProps) {
   return (
     <Link href={`/ecosystem/${project.id}`}>
@@ -26,7 +28,7 @@ export function ProjectCard({ project }: ProjectCardProps) {
                 className="object-contain"
                 onError={(e) => {
                   // Fallback to a default image if logo fails to load
-                  (e.target as HTMLImageElement).src = '/images/default-project.svg';
+                  (e.target as HTMLImageElement).src = `${basePath}/images/default-project.svg`;
                 }}
               />
             </div>

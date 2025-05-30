@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/Button';
 import { LoadingSpinner } from '@/components/common/LoadingSpinner';
 import { governanceService, type Referendum } from '@/services/governance';
 import { useWalletStore } from '@/store/useWalletStore';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/Dialog';
+import { Input } from '@/components/ui/Input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/Select';
 
 const STATUS_OPTIONS = [
   { value: 'all', label: 'All' },
@@ -17,6 +20,16 @@ const STATUS_OPTIONS = [
   { value: 'killed', label: 'Killed' }
 ];
 
+const CONVICTION_OPTIONS = [
+  { value: '0', label: '0.1x (Locked for 1x period)' },
+  { value: '1', label: '1x (Locked for 1x period)' },
+  { value: '2', label: '2x (Locked for 2x period)' },
+  { value: '3', label: '3x (Locked for 4x period)' },
+  { value: '4', label: '4x (Locked for 8x period)' },
+  { value: '5', label: '5x (Locked for 16x period)' },
+  { value: '6', label: '6x (Locked for 32x period)' }
+];
+
 export function ReferendumList() {
   const [referendums, setReferendums] = useState<Referendum[]>([]);
   const [filteredReferendums, setFilteredReferendums] = useState<Referendum[]>([]);
@@ -24,6 +37,12 @@ export function ReferendumList() {
   const [error, setError] = useState<string | null>(null);
   const [selectedStatus, setSelectedStatus] = useState('all');
   const { selectedAccount } = useWalletStore();
+  const [showVoteDialog, setShowVoteDialog] = useState(false);
+  const [selectedReferendum, setSelectedReferendum] = useState<Referendum | null>(null);
+  const [voteAmount, setVoteAmount] = useState('');
+  const [voteType, setVoteType] = useState<'aye' | 'nay'>('aye');
+  const [conviction, setConviction] = useState('0');
+  const [isVoting, setIsVoting] = useState(false);
 
   async function loadReferendums() {
     try {
@@ -51,6 +70,27 @@ export function ReferendumList() {
       setFilteredReferendums(referendums.filter(ref => ref.status === selectedStatus));
     }
   }, [selectedStatus, referendums]);
+
+  const handleVote = async () => {
+    if (!selectedReferendum || !selectedAccount) return;
+
+    try {
+      setIsVoting(true);
+      await governanceService.vote(
+        selectedReferendum.index,
+        voteType,
+        voteAmount,
+        selectedAccount.address
+      );
+      setShowVoteDialog(false);
+      void loadReferendums(); // Refresh the list
+    } catch (err) {
+      console.error('Failed to vote:', err);
+      setError(err instanceof Error ? err.message : 'Failed to submit vote');
+    } finally {
+      setIsVoting(false);
+    }
+  };
 
   if (isLoading) {
     return (
@@ -91,15 +131,15 @@ export function ReferendumList() {
             ))}
           </select>
         </div>
-      <Card className="p-6">
+        <Card className="p-6">
           <p className="text-center text-gray-600">No referendums found for the selected filter.</p>
-      </Card>
+        </Card>
       </div>
     );
   }
 
   return (
-            <div>
+    <div>
       <div className="mb-6">
         <label htmlFor="status-filter" className="block text-sm font-medium text-gray-700 mb-2">
           Filter by Status
@@ -155,20 +195,20 @@ export function ReferendumList() {
                 <p className="text-gray-600 mb-6">{referendum.description}</p>
                 
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-6 mb-6">
-                <div>
+                  <div>
                     <p className="text-sm text-gray-500 mb-1">Track</p>
                     <p className="font-medium text-gray-900">{referendum.track}</p>
-                </div>
-                <div>
+                  </div>
+                  <div>
                     <p className="text-sm text-gray-500 mb-1">Deposit</p>
                     <p className="font-medium text-gray-900">{referendum.deposit} DOT</p>
-                </div>
-                <div>
+                  </div>
+                  <div>
                     <p className="text-sm text-gray-500 mb-1">Proposer</p>
                     <div className="flex items-center gap-2">
                       <p className="font-medium text-gray-900 truncate" title={referendum.proposer}>
-                    {referendum.proposer.slice(0, 8)}...{referendum.proposer.slice(-8)}
-                  </p>
+                        {referendum.proposer.slice(0, 8)}...{referendum.proposer.slice(-8)}
+                      </p>
                       <a
                         href={`https://polkadot.polkassembly.io/user/${referendum.proposer}`}
                         target="_blank"
@@ -177,7 +217,7 @@ export function ReferendumList() {
                       >
                         View
                       </a>
-              </div>
+                    </div>
                   </div>
                   <div>
                     <p className="text-sm text-gray-500 mb-1">Submission Time</p>
@@ -196,68 +236,124 @@ export function ReferendumList() {
                           <span className="text-xs font-semibold inline-block text-green-800">
                             Ayes: {referendum.tally.ayes}
                           </span>
-                  </div>
-                  <div>
+                        </div>
+                        <div>
                           <span className="text-xs font-semibold inline-block text-red-800">
                             Nays: {referendum.tally.nays}
                           </span>
                         </div>
                       </div>
-                      <div className="overflow-hidden h-2 text-xs flex rounded bg-gray-100">
+                      <div className="overflow-hidden h-2 mb-4 text-xs flex rounded bg-gray-200">
                         <div
-                          style={{
-                            width: `${
-                              (Number(referendum.tally.ayes) /
-                                (Number(referendum.tally.ayes) + Number(referendum.tally.nays))) *
-                              100
-                            }%`
-                          }}
+                          style={{ width: `${(Number(referendum.tally.ayes) / (Number(referendum.tally.ayes) + Number(referendum.tally.nays))) * 100}%` }}
                           className="shadow-none flex flex-col text-center whitespace-nowrap text-white justify-center bg-green-500"
-                        ></div>
+                        />
                       </div>
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                      <p className="text-gray-600">
-                        Support: <span className="font-medium text-gray-900">{referendum.tally.support}%</span>
-                      </p>
-                      <p className="text-gray-600">
-                        Turnout: <span className="font-medium text-gray-900">
-                          {((Number(referendum.tally.ayes) + Number(referendum.tally.nays)) / 1e10).toFixed(2)}M DOT
-                        </span>
-                      </p>
                   </div>
                 </div>
+
+                {referendum.status === 'ongoing' && (
+                  <div className="mt-6 flex justify-end">
+                    <Button
+                      onClick={() => {
+                        setSelectedReferendum(referendum);
+                        setShowVoteDialog(true);
+                      }}
+                      className="bg-polkadot-pink hover:bg-polkadot-pink-dark text-white"
+                    >
+                      Vote
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </div>
+          </Card>
+        ))}
+      </div>
+
+      <Dialog open={showVoteDialog} onOpenChange={setShowVoteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Vote on Referendum #{selectedReferendum?.index}</DialogTitle>
+            <DialogDescription>
+              {selectedReferendum?.title}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Vote Type</label>
+              <div className="flex gap-4">
+                <Button
+                  variant={voteType === 'aye' ? 'default' : 'outline'}
+                  onClick={() => setVoteType('aye')}
+                  className="flex-1"
+                >
+                  Aye
+                </Button>
+                <Button
+                  variant={voteType === 'nay' ? 'default' : 'outline'}
+                  onClick={() => setVoteType('nay')}
+                  className="flex-1"
+                >
+                  Nay
+                </Button>
               </div>
             </div>
 
-            {selectedAccount && (
-                <div className="ml-6 flex flex-col gap-3">
-                <Button 
-                  variant="outline" 
-                    className="w-32 bg-green-50 hover:bg-green-100 border-green-200 text-green-700"
-                  onClick={() => {
-                    // TODO: Implement voting
-                    console.log('Vote Aye for referendum', referendum.index);
-                  }}
-                >
-                  Vote Aye
-                </Button>
-                <Button 
-                  variant="outline" 
-                    className="w-32 bg-red-50 hover:bg-red-100 border-red-200 text-red-700"
-                  onClick={() => {
-                    // TODO: Implement voting
-                    console.log('Vote Nay for referendum', referendum.index);
-                  }}
-                >
-                  Vote Nay
-                </Button>
-              </div>
-            )}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Amount (DOT)</label>
+              <Input
+                type="number"
+                value={voteAmount}
+                onChange={(e) => setVoteAmount(e.target.value)}
+                placeholder="Enter amount to vote"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Conviction</label>
+              <Select value={conviction} onValueChange={setConviction}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Select conviction" />
+                </SelectTrigger>
+                <SelectContent>
+                  {CONVICTION_OPTIONS.map((option) => (
+                    <SelectItem key={option.value} value={option.value}>
+                      {option.label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="flex justify-end gap-4 pt-4">
+              <Button
+                variant="outline"
+                onClick={() => setShowVoteDialog(false)}
+                disabled={isVoting}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={handleVote}
+                disabled={isVoting || !voteAmount}
+                className="bg-polkadot-pink hover:bg-polkadot-pink-dark text-white"
+              >
+                {isVoting ? (
+                  <>
+                    <LoadingSpinner className="w-4 h-4 mr-2" />
+                    Submitting...
+                  </>
+                ) : (
+                  'Submit Vote'
+                )}
+              </Button>
+            </div>
           </div>
-        </Card>
-      ))}
-      </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 } 

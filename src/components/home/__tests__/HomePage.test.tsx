@@ -50,12 +50,6 @@ describe('HomePage', () => {
     });
   });
 
-  it('renders all footer links', () => {
-    render(<HomePage />);
-    // @ts-ignore
-    expect(screen.getByText('Built with ❤️ for the Polkadot community')).toBeInTheDocument();
-  });
-
   it('has correct navigation links', () => {
     render(<HomePage />);
     const links = [

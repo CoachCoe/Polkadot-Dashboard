@@ -81,4 +81,11 @@ describe('Wallet Connection', () => {
   it.skip('should handle wallet connection error', () => {
     // ... existing test code ...
   });
+});
+
+describe('Wallet Page', () => {
+  it('loads the home page', () => {
+    cy.visit('/', { failOnStatusCode: false });
+    cy.findByRole('heading', { name: /explore polkadot/i }).should('exist');
+  });
 }); 

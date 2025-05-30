@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import Image from 'next/image';
-import { Twitter, MessageCircle, Linkedin } from 'lucide-react';
+import { Twitter, MessageCircle, Linkedin, Briefcase } from 'lucide-react';
 
 export function Footer() {
   const basePath = process.env.NODE_ENV === 'production' ? '/Polkadot-Dashboard' : '';
@@ -39,6 +39,15 @@ export function Footer() {
               <Linkedin className="w-6 h-6" />
               <span className="sr-only">Polkadot LinkedIn</span>
             </Link>
+            <Link
+              href="https://polkadot.com/community/decentralized-jobs/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-gray-600 hover:text-[#E6007A] transition-colors"
+            >
+              <Briefcase className="w-6 h-6" />
+              <span className="sr-only">Polkadot Jobs Board</span>
+            </Link>
           </div>
           <div className="flex items-center space-x-4 text-gray-600 text-sm">
             <span>Built with ❤️ for the Polkadot community</span>
@@ -48,6 +57,7 @@ export function Footer() {
                 alt="Polkadot"
                 fill
                 className="object-contain"
+                fetchPriority="low"
               />
             </div>
             <span>© {new Date().getFullYear()} Polkadot Hub. All rights reserved.</span>
