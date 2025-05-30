@@ -1,11 +1,13 @@
 /// <reference types="cypress" />
 /// <reference types="@testing-library/cypress" />
 import '@testing-library/cypress/add-commands';
-import type { Wallet, WalletAccount } from '@talismn/connect-wallets';
+import type { Wallet } from '@talismn/connect-wallets';
+import { mockWallet, mockAccount } from './mockWallet';
 
 declare global {
   interface Window {
     __talismanWallets?: Wallet[];
+    getWallets?: () => Wallet[];
   }
   
   namespace Cypress {
@@ -15,55 +17,41 @@ declare global {
        * @example cy.connectWallet()
        */
       connectWallet(): Chainable<void>
+      /**
+       * Custom command to restore wallet state
+       * @example cy.restoreWalletState()
+       */
+      restoreWalletState(): Chainable<void>
     }
   }
 }
 
-Cypress.Commands.add('connectWallet', () => {
-  // Mock the Talisman wallet API
-  const mockAccount: WalletAccount = {
-    address: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
-    name: 'Test Account',
-    source: 'polkadot-js'
-  };
+// Mock wallet state
+const mockWalletState = {
+  state: {
+    selectedAccount: mockAccount,
+    wallet: mockWallet,
+    isConnecting: false,
+    error: null
+  },
+  version: 0
+};
 
-  const mockWallet: Wallet = {
-    enable: () => Promise.resolve(true),
-    getAccounts: () => Promise.resolve([mockAccount]),
-    subscribeAccounts: () => {
-      // Return a noop unsubscribe function
-      return () => {};
-    },
-    installed: true,
-    title: 'Polkadot.js',
-    extensionName: 'polkadot-js',
-    installUrl: 'https://polkadot.js.org/extension/',
-    logo: {
-      src: 'https://polkadot.js.org/logo.svg',
-      alt: 'Polkadot.js'
-    },
-    signer: {} as any,
-    extension: {} as any,
-    transformError: (err: Error) => err
-  };
-
-  // Set up the initial wallet state in localStorage
-  const mockWalletState = {
-    state: {
-      accounts: [mockAccount],
-      selectedAccount: mockAccount,
-      isConnected: true,
-    },
-    version: 0
-  };
-
-  // Set the wallet state in localStorage before any interactions
+Cypress.Commands.add('restoreWalletState', () => {
+  // Set the wallet state in localStorage
   localStorage.setItem('wallet-storage', JSON.stringify(mockWalletState));
-
+  
   // Mock the module in the window context
   cy.window().then((win) => {
     win.__talismanWallets = [mockWallet];
+    // Stub getWallets to return our mock
+    win.getWallets = () => [mockWallet];
   });
+});
+
+Cypress.Commands.add('connectWallet', () => {
+  // Restore the wallet state first
+  cy.restoreWalletState();
 
   // Click the connect wallet button and wait for the wallet list to appear
   cy.findByRole('button', { name: /connect wallet/i }).click();
@@ -72,6 +60,12 @@ Cypress.Commands.add('connectWallet', () => {
   // Click the Polkadot.js wallet button
   cy.findByRole('button', { name: /polkadot\.js/i }).click();
 
-  // Wait for the wallet to be connected and verify the address is displayed
-  cy.findByRole('button', { name: new RegExp(mockAccount.address, 'i') }).should('exist');
+  // Wait for the wallet to be connected and verify the account is displayed
+  cy.findByRole('button', { name: /test account/i }).should('exist');
+  
+  // Verify the wallet state is properly set
+  cy.window().then((win) => {
+    const storedState = JSON.parse(win.localStorage.getItem('wallet-storage') || '{}');
+    expect(storedState.state.selectedAccount).to.deep.equal(mockAccount);
+  });
 });

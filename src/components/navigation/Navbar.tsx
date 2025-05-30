@@ -46,6 +46,7 @@ export const Navbar = memo(function Navbar() {
               <NavLink href={ROUTES.STAKING} label="Staking" isActive={pathname === ROUTES.STAKING} />
               <NavLink href={ROUTES.GOVERNANCE} label="Governance" isActive={pathname === ROUTES.GOVERNANCE} />
               <NavLink href={ROUTES.ECOSYSTEM} label="Ecosystem" isActive={pathname === ROUTES.ECOSYSTEM} />
+              <NavLink href={ROUTES.RELIABILITY_METRICS} label="Reliability Metrics" isActive={pathname === ROUTES.RELIABILITY_METRICS} />
               <NavLink href={ROUTES.ROADMAP} label="Product Roadmap" isActive={pathname === ROUTES.ROADMAP} />
             </div>
           </div>

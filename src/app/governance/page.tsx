@@ -52,7 +52,7 @@ export default function GovernancePage() {
         <Card className="p-6">
           <h2 className="text-xl font-semibold mb-4">Connect Wallet</h2>
           <p className="text-gray-600 mb-4">Please connect your wallet to access governance features.</p>
-          <WalletConnect />
+            <WalletConnect />
         </Card>
       </div>
     );

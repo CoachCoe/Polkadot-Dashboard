@@ -34,7 +34,7 @@ export const WalletConnect = memo(function WalletConnect({ className }: WalletCo
 
       await retry(
         async () => {
-          await wallet.enable('Polkadot Dashboard');
+      await wallet.enable('Polkadot Dashboard');
           await connect(wallet);
         },
         configService.maxRetryAttempts,

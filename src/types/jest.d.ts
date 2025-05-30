@@ -5,19 +5,7 @@ import { GovernanceService } from '@/services/governance';
 import '@testing-library/jest-dom';
 
 declare global {
-  namespace jest {
-    interface Matchers<R> {
-      toBeInTheDocument(): R;
-      toHaveAttribute(attr: string, value?: string): R;
-      toHaveLength(length: number): R;
-      toContain(item: any): R;
-      toHaveBeenCalledTimes(n: number): R;
-      toBe(expected: any): R;
-      toBeTruthy(): R;
-      toBeFalsy(): R;
-      toBeCalled(): R;
-    }
-  }
+  // Removed manual Matchers interface to avoid conflicts
 }
 
 interface CustomMatchers<R = unknown> {

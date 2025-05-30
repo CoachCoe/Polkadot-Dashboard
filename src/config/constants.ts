@@ -15,6 +15,7 @@ export const ROUTES = {
   ROADMAP: '/roadmap',
   PERFORMANCE: '/performance',
   SETTINGS: '/settings',
+  RELIABILITY_METRICS: '/reliability-metrics',
 } as const;
 
 export const API_ENDPOINTS = {

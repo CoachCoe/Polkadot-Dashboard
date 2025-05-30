@@ -23,8 +23,8 @@ export const useWalletStore = create<WalletStore>()(
           set({ isConnecting: true, error: null });
 
           // Get accounts from the wallet
-          const accounts = await wallet.getAccounts();
-          if (!accounts || accounts.length === 0) {
+      const accounts = await wallet.getAccounts();
+      if (!accounts || accounts.length === 0) {
             throw new Error(ERROR_MESSAGES.NO_ACCOUNTS_FOUND);
           }
 
@@ -37,23 +37,23 @@ export const useWalletStore = create<WalletStore>()(
             isConnecting: false,
             error: null,
           });
-        } catch (error) {
+    } catch (error) {
           console.error('Failed to connect wallet:', error);
-          set({
+      set({ 
             isConnecting: false,
             error: error instanceof Error ? error.message : ERROR_MESSAGES.WALLET_CONNECTION_FAILED,
-          });
+      });
           throw error;
-        }
-      },
+    }
+  },
 
-      disconnect: () => {
+  disconnect: () => {
         set(initialState);
       },
 
       setError: (error: string | null) => {
         set({ error });
-      },
+  },
     }),
     {
       name: 'wallet-storage',

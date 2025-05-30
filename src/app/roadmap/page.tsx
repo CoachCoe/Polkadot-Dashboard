@@ -87,6 +87,10 @@ export default function RoadmapPage() {
               </div>
             </Card>
           ))}
+          <Card className="p-6">
+            <h3 className="text-xl font-bold mb-2">Polkadot Jam</h3>
+            <p className="text-gray-600">Join us for Polkadot Jam, a community event to explore and build on Polkadot.</p>
+          </Card>
         </div>
       </div>
     </div>
