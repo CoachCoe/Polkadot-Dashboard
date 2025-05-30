@@ -72,6 +72,10 @@ A modern, feature-rich dashboard for the Polkadot ecosystem, built with Next.js,
 - **Frontend**: Next.js 14, React 18, TypeScript
 - **Styling**: Tailwind CSS, Radix UI components
 - **State Management**: Zustand
+- **Testing**:
+  - Jest for unit and component testing
+  - Cypress for end-to-end testing
+  - Testing Library for React component testing
 - **API Integration**: 
   - Polkadot.js API
   - WebSocket connections for real-time updates
@@ -142,7 +146,48 @@ src/
 - `npm run dev` - Start development server
 - `npm run build` - Build static export
 - `npm run lint` - Run ESLint
-- `npm run test` - Run tests
+- `npm run test` - Run Jest tests
+- `npm run test:watch` - Run Jest tests in watch mode
+- `npm run test:coverage` - Run Jest tests with coverage report
+- `npm run test:e2e` - Run Cypress tests in headless mode
+- `npm run test:e2e:dev` - Open Cypress Test Runner for interactive testing
+- `npm run test:all` - Run all tests (Jest, Cypress, and performance tests)
+
+## Testing
+
+### Unit and Component Tests
+The project uses Jest and React Testing Library for unit and component testing. These tests ensure individual components and functions work as expected.
+
+```bash
+# Run Jest tests
+npm run test
+
+# Run tests in watch mode
+npm run test:watch
+
+# Generate coverage report
+npm run test:coverage
+```
+
+### End-to-End Tests
+Cypress is used for end-to-end testing, ensuring the application works correctly from a user's perspective. The test suite covers critical user flows including:
+
+- Wallet connection and management
+- Governance page functionality
+- Navigation and routing
+- Component interactions
+
+```bash
+# Run Cypress tests in headless mode
+npm run test:e2e
+
+# Open Cypress Test Runner for interactive testing
+npm run test:e2e:dev
+```
+
+Key test files:
+- `cypress/e2e/governance.cy.ts` - Tests for governance functionality
+- `cypress/e2e/wallet.cy.ts` - Tests for wallet connection and management
 
 ## Contributing
 
