@@ -28,7 +28,7 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
   const [api, setApi] = useState<ApiPromise | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { selectedAccount } = useWalletStore();
+  const { selectedAccount, isConnected: isWalletConnected } = useWalletStore();
 
   useEffect(() => {
     let isSubscribed = true;
@@ -36,7 +36,13 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
 
     const initPolkadot = async () => {
       try {
-        if (!selectedAccount) {
+        // If we already have a connected API and the wallet is still connected, don't reinitialize
+        if (currentApi?.isConnected && isWalletConnected) {
+          return;
+        }
+
+        // If wallet is disconnected, cleanup the API
+        if (!isWalletConnected) {
           if (currentApi) {
             await currentApi.disconnect();
             if (isSubscribed) {
@@ -47,22 +53,38 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
           return;
         }
 
-        // Initialize the API
-        const wsProvider = new WsProvider('wss://rpc.polkadot.io');
-        const provider = wsProvider as unknown as ProviderInterface;
-        const newApi = await ApiPromise.create({ provider });
-        currentApi = newApi;
+        // Initialize the API if we don't have one
+        if (!currentApi || !currentApi.isConnected) {
+          const wsProvider = new WsProvider('wss://rpc.polkadot.io');
+          const provider = wsProvider as unknown as ProviderInterface;
+          const newApi = await ApiPromise.create({ provider });
+          currentApi = newApi;
 
-        // Enable the extension
-        const extensions = await web3Enable('Polkadot Hub');
-        if (extensions.length === 0) {
-          throw new Error('No extension found');
-        }
+          // Enable the extension
+          const extensions = await web3Enable('Polkadot Hub');
+          if (extensions.length === 0) {
+            throw new Error('No extension found');
+          }
 
-        if (isSubscribed) {
-          setApi(newApi);
-          setIsConnected(true);
-          setError(null);
+          // Subscribe to connection state changes
+          newApi.on('connected', () => {
+            if (isSubscribed) {
+              setIsConnected(true);
+              setError(null);
+            }
+          });
+
+          newApi.on('disconnected', () => {
+            if (isSubscribed) {
+              setIsConnected(false);
+            }
+          });
+
+          if (isSubscribed) {
+            setApi(newApi);
+            setIsConnected(true);
+            setError(null);
+          }
         }
       } catch (err) {
         if (isSubscribed) {
@@ -76,11 +98,10 @@ export function PolkadotProvider({ children }: PolkadotProviderProps) {
 
     return () => {
       isSubscribed = false;
-      if (currentApi) {
-        void currentApi.disconnect();
-      }
+      // Don't disconnect the API on cleanup
+      // Only disconnect when the wallet is explicitly disconnected
     };
-  }, [selectedAccount]);
+  }, [selectedAccount, isWalletConnected]);
 
   return (
     <PolkadotContext.Provider value={{ api, isConnected, error }}>
