@@ -4,6 +4,18 @@ const webpack = require('webpack');
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
+  output: 'export',
+  basePath: '/Polkadot-Dashboard',
+  images: {
+    unoptimized: true,
+    domains: ['raw.githubusercontent.com'],
+    remotePatterns: [
+      {
+        protocol: 'https',
+        hostname: '**',
+      },
+    ],
+  },
   experimental: {
     optimizePackageImports: ['@polkadot/api', '@polkadot/extension-dapp'],
   },
@@ -54,16 +66,6 @@ const nextConfig = {
     };
 
     return config;
-  },
-  images: {
-    domains: ['raw.githubusercontent.com'],
-    remotePatterns: [
-      {
-        protocol: 'https',
-        hostname: '**',
-      },
-    ],
-    unoptimized: true,
   },
 }
 
