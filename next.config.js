@@ -4,7 +4,6 @@ const webpack = require('webpack');
 const nextConfig = {
   reactStrictMode: true,
   swcMinify: true,
-  output: 'export',
   basePath: '/Polkadot-Dashboard',
   images: {
     unoptimized: true,
