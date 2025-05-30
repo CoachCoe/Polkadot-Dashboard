@@ -3,7 +3,6 @@
 import React, { memo } from 'react';
 import { WalletConnect } from '@/components/wallet/WalletConnect';
 import Link from 'next/link';
-import Image from 'next/image';
 import { usePathname } from 'next/navigation';
 import { ROUTES } from '@/config/constants';
 
