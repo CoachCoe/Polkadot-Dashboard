@@ -32,7 +32,7 @@ export const AssetManagement: React.FC = () => {
     <Card className="p-8 bg-white shadow-lg rounded-xl border-0">
       <div className="flex justify-between items-center mb-6">
         <div className="flex items-center gap-4">
-          <h2 className="text-2xl font-semibold text-gray-900">Asset Management</h2>
+          <h2 className="text-2xl font-semibold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">Asset Management</h2>
           <button
             onClick={() => void loadTransactions()}
             className="p-2 hover:bg-gray-100 rounded-full transition-colors"
@@ -64,7 +64,7 @@ export const AssetManagement: React.FC = () => {
       ) : (
         <div className="space-y-4">
           {transactions.map((tx) => (
-            <div key={tx.hash} className="p-4 bg-gray-50 rounded-lg transform transition-all duration-200 hover:shadow-md">
+            <div key={tx.hash} className="p-4 bg-gray-50 rounded-lg transform transition-all duration-200 hover:shadow-md hover:scale-[1.01]">
               <div className="flex justify-between items-center">
                 <div>
                   <span className="font-medium text-gray-900">{tx.type}</span>

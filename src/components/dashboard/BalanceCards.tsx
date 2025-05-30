@@ -61,7 +61,7 @@ export const BalanceCards: React.FC<BalanceCardsProps> = ({ address }) => {
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      <Card className="p-6 bg-white shadow-lg rounded-xl border-0 transform transition-all duration-200 hover:shadow-xl">
+      <Card className="p-6 bg-white shadow-lg rounded-xl border-0 transform transition-all duration-200 hover:shadow-xl hover:scale-[1.02]">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-medium text-gray-900">Available Balance</h3>
           <button
@@ -72,19 +72,19 @@ export const BalanceCards: React.FC<BalanceCardsProps> = ({ address }) => {
             <ArrowPathIcon className={`w-5 h-5 text-gray-500 ${isLoading ? 'animate-spin' : ''}`} />
           </button>
         </div>
-        <p className="text-3xl font-bold text-gray-900">{safeFormatBalance(balanceData.balances[0]?.available)} DOT</p>
+        <p className="text-3xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">{safeFormatBalance(balanceData.balances[0]?.available)} DOT</p>
         <p className="text-sm text-gray-500 mt-2">Live balance updates</p>
       </Card>
 
-      <Card className="p-6 bg-white shadow-lg rounded-xl border-0 transform transition-all duration-200 hover:shadow-xl">
+      <Card className="p-6 bg-white shadow-lg rounded-xl border-0 transform transition-all duration-200 hover:shadow-xl hover:scale-[1.02]">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Total Staked</h3>
-        <p className="text-3xl font-bold text-gray-900">{safeFormatBalance(totalStaked)} DOT</p>
+        <p className="text-3xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">{safeFormatBalance(totalStaked)} DOT</p>
         <p className="text-sm text-gray-500 mt-2">Across {balanceData.stakes.length} validators</p>
       </Card>
 
-      <Card className="p-6 bg-white shadow-lg rounded-xl border-0 transform transition-all duration-200 hover:shadow-xl">
+      <Card className="p-6 bg-white shadow-lg rounded-xl border-0 transform transition-all duration-200 hover:shadow-xl hover:scale-[1.02]">
         <h3 className="text-lg font-medium text-gray-900 mb-4">Recent Activity</h3>
-        <p className="text-3xl font-bold text-gray-900">{balanceData.transactions.length}</p>
+        <p className="text-3xl font-bold bg-gradient-to-r from-pink-600 to-purple-600 bg-clip-text text-transparent">{balanceData.transactions.length}</p>
         <p className="text-sm text-gray-500 mt-2">Transactions in the last 24h</p>
       </Card>
     </div>
