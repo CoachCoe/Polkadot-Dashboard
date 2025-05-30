@@ -2,7 +2,6 @@
 
 import dynamic from 'next/dynamic';
 import * as React from 'react';
-import { useAuth } from '@/contexts/AuthContext';
 import { useWalletStore } from '@/store/useWalletStore';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/Tabs';
 import { Card } from '@/components/ui/Card';
@@ -43,12 +42,11 @@ const OpenGovGuide = dynamic(
 );
 
 export default function GovernancePage() {
-  const { isAuthenticated } = useAuth();
-  const { selectedAccount } = useWalletStore();
+  const { selectedAccount, isConnected } = useWalletStore();
   const [showGuide, setShowGuide] = React.useState(false);
 
-  // Show wallet connection prompt if not authenticated
-  if (!isAuthenticated || !selectedAccount) {
+  // Show wallet connection prompt if not connected
+  if (!isConnected || !selectedAccount) {
     return (
       <div className="container max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         <Card className="p-8 max-w-2xl mx-auto bg-white shadow-sm border border-gray-100">
