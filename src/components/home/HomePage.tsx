@@ -2,7 +2,6 @@ import React from 'react';
 import Link from 'next/link';
 import { Button } from '@/components/ui/Button';
 import { Card } from '@/components/ui/Card';
-import { Footer } from '@/components/layout/Footer';
 
 export function HomePage() {
   return (
@@ -111,9 +110,6 @@ export function HomePage() {
           </Card>
         </div>
       </div>
-
-      {/* Footer */}
-      <Footer />
     </div>
   );
 } 

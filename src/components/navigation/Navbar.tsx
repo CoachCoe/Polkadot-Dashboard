@@ -5,7 +5,6 @@ import { WalletConnect } from '@/components/wallet/WalletConnect';
 import Link from 'next/link';
 import Image from 'next/image';
 import { usePathname } from 'next/navigation';
-import { configService } from '@/services/configService';
 import { ROUTES } from '@/config/constants';
 
 const NavLink = memo(({ href, label, isActive }: { href: string; label: string; isActive: boolean }) => (
@@ -20,7 +19,6 @@ NavLink.displayName = 'NavLink';
 
 export const Navbar = memo(function Navbar() {
   const pathname = usePathname();
-  const basePath = configService.basePath;
 
   return (
     <nav className="border-b border-gray-200 bg-white">
@@ -30,7 +28,7 @@ export const Navbar = memo(function Navbar() {
             <Link href={ROUTES.HOME} className="flex items-center space-x-3">
               <div className="relative w-8 h-8 bg-gray-100 rounded-full">
                 <Image
-                  src={`${basePath}/images/mark-polkadot.svg`}
+                  src="/images/mark-polkadot.svg"
                   alt="Polkadot"
                   fill
                   className="object-contain"
